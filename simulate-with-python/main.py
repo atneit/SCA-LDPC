@@ -1,29 +1,41 @@
 #!/bin/env python
 """
-Module Docstring
+Main entry point for the python LDPC code simulator.
 """
 
 __author__ = "Alexander Nilsson; Denis Nabokov; Qian Guo"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-import argparse
 from logzero import logger
+logger.debug("Importing dependencies...")
+
+import argparse
 from simulate.utils import CommandsBase
+import numpy as np
+from ldpc.codes import rep_code
+from ldpc import bp_decoder
+
+logger.debug("Importing dependencies... Done")
 
 class Commands(CommandsBase):
     """
-    All possible commands for this simulator to run
+    This class defines all possible commands for this simulator to run
     """
 
     PREFIX="command_"
+
+    def setup_arguments(self, parser: argparse.ArgumentParser):
+        logger.debug("Adding arguments for commands...")
+        pass
+
+    def command_regular_ldpc_code(self, args: argparse.Namespace):
+        pass
     
-    def command_official_example(self, args):
+    def command_official_example(self, args: argparse.Namespace):
         """A simple command to test the functionality of the ldpc package"""
         logger.info("official example")
-        import numpy as np
-        from ldpc.codes import rep_code
-        from ldpc import bp_decoder
+
 
         n=13
         error_rate=0.3
@@ -46,21 +58,10 @@ class Commands(CommandsBase):
             print(f"Decoding: {error}\n")
 
 
-
-def main(args):
-    """ Main entry point of the app """
-    logger.info("Python simulator started")
-
-    cmds = Commands()
-    cmds.run(args)
-
-
 if __name__ == "__main__":
     """ This is executed when run from the command line """
-    parser = argparse.ArgumentParser()
+    cmds = Commands()
+    
+    logger.info("Python simulator started")
 
-    # What command should execute
-    parser.add_argument("command", help="What command should execute?")
-
-    args = parser.parse_args()
-    main(args)
+    cmds.run()

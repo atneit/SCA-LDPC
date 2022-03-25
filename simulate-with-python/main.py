@@ -26,7 +26,6 @@ class Commands(CommandsBase):
     PREFIX="command_"
 
     def setup_arguments(self, parser: argparse.ArgumentParser):
-        logger.debug("Adding arguments for commands...")
         pass
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
@@ -62,6 +61,8 @@ if __name__ == "__main__":
     """ This is executed when run from the command line """
     cmds = Commands()
     
+    args = cmds.parse_arguments()
+
     logger.info("Python simulator started")
 
-    cmds.run()
+    cmds.run(args)

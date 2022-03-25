@@ -14,8 +14,11 @@ class CommandsBase:
 
         logger.debug("Setting up arguments parser...")
         self._parser = argparse.ArgumentParser()
+
         # What command should execute
-        self._parser.add_argument("command", help="What command should execute?")
+        possible_commands = [command[len(self.PREFIX):] for command in dir(self) if self.PREFIX in command]
+        self._parser.add_argument("command", help="What command should execute? Possible values: " + str(possible_commands))
+
         self.setup_arguments(self._parser)
 
     def setup_arguments(self, parser):

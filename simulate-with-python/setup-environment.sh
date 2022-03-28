@@ -16,8 +16,11 @@ echo "Making sure all specified python packages are installed..."
 pip install -r requirements.txt
 
 echo "Done!"
-echo
-echo -e "This script should be run as: "
-echo -e "\tsource $0"
-echo -e "if it wasn't you need to run the following to activate the virtual environment for the current shell:"
-echo -e "\tsource $VENV_DEST/bin/activate"
+
+if [[ "$0" == *setup-environment.sh ]]; then
+    echo
+    echo -e "This script should be run as: "
+    echo -e "\tsource $0"
+    echo -e "if it wasn't you need to run the following to activate the virtual environment for the current shell:"
+    echo -e "\tsource $VENV_DEST/bin/activate"
+fi

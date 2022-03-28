@@ -44,6 +44,9 @@ def make_regular_ldpc_parity_check_matrix(k, r, column_weight, row_weight, seed=
 
     The shape is [H_(r*k)|I_(r*r)] where k is the number of variable
     nodes and r is the number of check nodes.
+
+    Code is shamelessly copied (and slightly adapted) from:
+    https://hichamjanati.github.io/pyldpc/_modules/pyldpc/code.html
     """
     assert k * column_weight == r * row_weight
 

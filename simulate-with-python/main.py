@@ -16,6 +16,7 @@ logger.debug("Importing dependencies...")
 from simulate.make_code import (
     make_qc_parity_check_matrix,
     make_regular_ldpc_parity_check_matrix,
+    make_regular_ldpc_parity_check_matrix_identity,
 )
 from simulate.utils import CommandsBase, pretty_string_matrix
 from simulate.decode import simulate_frame_error_rate
@@ -61,18 +62,41 @@ class Commands(CommandsBase):
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(
-            "Testing a quasi cyclic ldpc code with a parity check matrix of the form: [H_0|H_1|I]"
+            "Testing a regular (3,6) ldpc code with a parity check matrix of the form: H_r*k"
         )
         runs = args.runs
         error_rate = args.error_rate
-        k = 100  # 17669
-        rate = 0.5
-        r = int(k * rate)
+        k = 300  # 17669
+        r = 150  #
+        rate = k / (k + r)
         row_weight = 6
-        column_weight = int(row_weight * rate)
+        column_weight = 3
         # n = k + r
         H = make_regular_ldpc_parity_check_matrix(k, r, column_weight, row_weight)
-        with np.printoptions(threshold=sys.maxsize):
+        logger.info(f"Constructed a rate {rate} code")
+        with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
+            logger.debug("Constructed parity check matrix:\n" + str(H))
+
+        successes = simulate_frame_error_rate(H, error_rate, runs)
+        logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
+
+    def command_regular_ldpc_code_identity(self, args: argparse.Namespace):
+        logger.info(
+            "Testing a regular (3,6) ldpc code with a parity check matrix of the form: H_r*k|I_r*r"
+        )
+        runs = args.runs
+        error_rate = args.error_rate
+        k = 300  # 17669
+        r = 150  #
+        rate = k / (k + r)
+        row_weight = 6
+        column_weight = 3
+        # n = k + r
+        H = make_regular_ldpc_parity_check_matrix_identity(
+            k, r, column_weight, row_weight
+        )
+        logger.info(f"Constructed a rate {rate} code")
+        with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
             logger.debug("Constructed parity check matrix:\n" + str(H))
 
         successes = simulate_frame_error_rate(H, error_rate, runs)

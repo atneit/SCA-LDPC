@@ -3,7 +3,9 @@ from ldpc import bp_decoder
 from logzero import logger
 
 
-def simulate_frame_error_rate(H: np.ndarray, error_rate: float, runs: int):
+def simulate_frame_error_rate(
+    H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
+):
     n = H.shape[1]
     # BP decoder class. Make sure this is defined outside the loop
     bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum")
@@ -12,7 +14,7 @@ def simulate_frame_error_rate(H: np.ndarray, error_rate: float, runs: int):
     successes = 0
     for _ in range(runs):
         for i in range(n):
-            if np.random.random() < error_rate:
+            if rng.rand() < error_rate:
                 error[i] = 1
             else:
                 error[i] = 0

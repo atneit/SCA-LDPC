@@ -1,4 +1,3 @@
-from random import randint
 import sys
 import numpy as np
 from scipy.linalg import circulant
@@ -6,14 +5,14 @@ from . import utils
 from logzero import logger
 
 
-def fixed_weight_vec(size, samplings: int):
+def fixed_weight_vec(size, samplings: int, rng):
     curr_weight = 0
     # initialize with zeroes
     a = np.zeros(size, dtype=int)
 
     # Add random ones
     while curr_weight < samplings:
-        i = randint(0, size - 1)
+        i = rng.randint(0, size - 1)
         if a[i] == 0:
             a[i] = 1
             curr_weight += 1
@@ -27,12 +26,14 @@ def flatten_matrix_parts(parts: np.ndarray):
     return np.concatenate(parts, axis=1)
 
 
-def make_qc_parity_check_matrix(block_len: int, column_weight: int, num_blocks: int):
+def make_qc_parity_check_matrix(
+    block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
+):
     """Constructs a parity check matrix H=[H_0 + H_i + I] where i is `num_blocks` and I is the identity matrix"""
 
     # construct the cyclic blocks
     parts = [
-        circulant(fixed_weight_vec(block_len, column_weight))
+        circulant(fixed_weight_vec(block_len, column_weight, rng))
         for _ in range(0, num_blocks)
     ]
 
@@ -43,7 +44,9 @@ def make_qc_parity_check_matrix(block_len: int, column_weight: int, num_blocks: 
     return flatten_matrix_parts(parts)
 
 
-def make_regular_ldpc_parity_check_matrix(k, r, column_weight, row_weight, seed=None):
+def make_regular_ldpc_parity_check_matrix(
+    k, r, column_weight, row_weight, rng: np.random.RandomState
+):
     """
     Constructs a regular ldpc parity check matrix.
 
@@ -53,7 +56,6 @@ def make_regular_ldpc_parity_check_matrix(k, r, column_weight, row_weight, seed=
     Code is shamelessly copied (and adapted) from:
     https://hichamjanati.github.io/pyldpc/_modules/pyldpc/code.html
     """
-    rng = utils.check_random_state(seed)
 
     if (
         column_weight <= 1

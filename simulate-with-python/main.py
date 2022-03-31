@@ -120,6 +120,17 @@ class Commands(CommandsBase):
         successes = simulate_frame_error_rate(H, error_rate, runs)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
+    def command_compute_bound(self, args: argparse.Namespace):
+        k = 300
+        r = 150
+        rate = k / (k + r)
+
+        p = args.error_rate
+        entropy = -p * np.log2(p) - (1 - p) * np.log2(1 - p)
+        # capacity of Binary symmetric channel 
+        capacity = 1 - entropy
+        logger.info(f"R {'<' if rate < capacity else '>'} C, where R = {rate}, C = {capacity}")
+
     def command_official_example(self, args: argparse.Namespace):
         """A simple command to test the functionality of the ldpc package"""
         logger.info("official example")

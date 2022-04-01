@@ -14,7 +14,7 @@ def pretty_string_matrix(matrix: list):
     return "[" + "\n ".join([str(row) for row in matrix]) + "]"
 
 
-def check_random_state(seed):
+def make_random_state(seed) -> np.random.RandomState:
     """Turn seed into a np.random.RandomState instance
     Parameters
     ----------

@@ -57,13 +57,24 @@ class ErrorsProvider:
                     return res
                 res += 1
 
+    # TODO: potentially remove this function, it's computing average error rate of among all positions
+    # for binary case
+    def get_error_rate(self):
+        if self.error_distribution is None:
+            return self.error_rate
+        # not stable?
+        res = 0
+        for pr in self.error_distribution:
+            res += pr[0]
+        return res / len(self.error_distribution)
+
 
 def simulate_frame_error_rate(
     H: np.ndarray, errors_provider: ErrorsProvider, runs: int, rng: np.random.RandomState
 ):
     n = H.shape[1]
     # BP decoder class. Make sure this is defined outside the loop
-    bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum")
+    bpd = bp_decoder(H, error_rate=errors_provider.get_error_rate(), max_iter=n, bp_method="product_sum")
     error = np.zeros(n).astype(int)  # error vector
 
     successes = 0

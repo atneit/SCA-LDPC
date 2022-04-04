@@ -106,7 +106,6 @@ class Commands(CommandsBase):
         rng = make_random_state(args.seed)
         runs = args.runs
         errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
-        error_rate = args.error_rate
         k = 300  # 17669
         r = 150  #
         rate = k / (k + r)
@@ -127,7 +126,7 @@ class Commands(CommandsBase):
         )
         rng = make_random_state(args.seed)
         runs = args.runs
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         k = 300  # 17669
         r = 150  #
         rate = k / (k + r)
@@ -141,7 +140,7 @@ class Commands(CommandsBase):
         with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
             logger.debug("Constructed parity check matrix:\n" + str(H))
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_qc_ldpc_code(self, args: argparse.Namespace):
@@ -150,7 +149,7 @@ class Commands(CommandsBase):
         )
         rng = make_random_state(args.seed)
         runs = args.runs
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         k = 1000  # 17669
         num_blocks = 2
         r = int(k / num_blocks)
@@ -160,7 +159,7 @@ class Commands(CommandsBase):
         )
         logger.debug("Constructed parity check matrix:\n" + str(H))
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_compute_bound(self, args: argparse.Namespace):
@@ -182,11 +181,11 @@ class Commands(CommandsBase):
         rng = make_random_state(args.seed)
 
         n = 13
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         runs = args.runs
         H = rep_code(n)
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
 

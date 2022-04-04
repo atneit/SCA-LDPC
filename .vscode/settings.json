@@ -14,5 +14,8 @@
     "python.formatting.provider": "black",
     "editor.formatOnSave": true,
     "editor.formatOnType": true,
-    "editor.formatOnPaste": true
+    "editor.formatOnPaste": true,
+    "rust-analyzer.server.extraEnv": {
+        "CARGO_TARGET_DIR": "target/ra"
+    }
 }

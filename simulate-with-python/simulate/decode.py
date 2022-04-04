@@ -3,32 +3,6 @@ from ldpc import bp_decoder
 from logzero import logger
 
 
-def simulate_frame_error_rate(
-    H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
-):
-    n = H.shape[1]
-    # BP decoder class. Make sure this is defined outside the loop
-    bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum")
-    error = np.zeros(n).astype(int)  # error vector
-
-    successes = 0
-    for _ in range(runs):
-        for i in range(n):
-            if rng.rand() < error_rate:
-                error[i] = 1
-            else:
-                error[i] = 0
-        syndrome = H @ error % 2  # calculates the error syndrome
-        logger.debug(f"Error: \n{error}")
-        logger.debug(f"Syndrome: \n{syndrome}")
-        decoding = bpd.decode(syndrome)
-        logger.debug(f"Decoding: \n{decoding}")
-        cmp = decoding == error
-        cmp = cmp.all()
-        successes += int(cmp)
-
-    return successes
-
 class ErrorsProvider:
     """
     Class for generating errors according to specified distribution.
@@ -40,15 +14,15 @@ class ErrorsProvider:
     generated errors lies in [-n/2, ..., n/2].
     """
 
-    def __init__(self, error_rate, error_file, rnd):
+    def __init__(self, error_rate, error_file, rng):
         self.error_rate = error_rate
         self.error_distribution = None
-        self.rnd = rnd
+        self.rng = rng
         import re
         if error_file is not None:
             error_distribution = []
             with open(error_file, 'rt') as f:
-                for line if f:
+                for line in f:
                     line = line.strip()
                     pr = re.split('[, ]+', line)
                     pr = list(float(x) for x in pr)
@@ -67,12 +41,12 @@ class ErrorsProvider:
         (if it was provided, otherwise pos is ignored).
         """
         if self.error_distribution is None:
-            return __get_binary_error(self.error_rate)
+            return self.__get_binary_error(self.error_rate)
         l = len(self.error_distribution)
         pr = self.error_distribution[pos % l]
         pr_len = len(pr)
         if pr_len == 1:
-            return __get_binary_error(pr[0])
+            return self.__get_binary_error(pr[0])
         else:
             rand = self.rng.rand()
             res = -(pr_len // 2)
@@ -82,4 +56,28 @@ class ErrorsProvider:
                 if threshold > rand:
                     return res
                 res += 1
+
+
+def simulate_frame_error_rate(
+    H: np.ndarray, errors_provider: ErrorsProvider, runs: int, rng: np.random.RandomState
+):
+    n = H.shape[1]
+    # BP decoder class. Make sure this is defined outside the loop
+    bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum")
+    error = np.zeros(n).astype(int)  # error vector
+
+    successes = 0
+    for _ in range(runs):
+        for i in range(n):
+            error[i] = errors_provider.get_error(i)
+        syndrome = H @ error % 2  # calculates the error syndrome
+        logger.debug(f"Error: \n{error}")
+        logger.debug(f"Syndrome: \n{syndrome}")
+        decoding = bpd.decode(syndrome)
+        logger.debug(f"Decoding: \n{decoding}")
+        cmp = decoding == error
+        cmp = cmp.all()
+        successes += int(cmp)
+
+    return successes
 

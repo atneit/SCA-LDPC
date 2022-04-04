@@ -30,3 +30,30 @@ def simulate_frame_error_rate(
         successes += int(cmp)
 
     return successes
+
+
+def simulate_frame_error_rate_rust(
+    H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
+):
+    from simulate_rs import bp_decode
+
+    n = H.shape[1]
+    error = np.zeros(n).astype(int)  # error vector
+
+    successes = 0
+    for _ in range(runs):
+        for i in range(n):
+            if rng.rand() < error_rate:
+                error[i] = 1
+            else:
+                error[i] = 0
+        syndrome = H @ error % 2  # calculates the error syndrome
+        logger.debug(f"Error: \n{error}")
+        logger.debug(f"Syndrome: \n{syndrome}")
+        decoding = bp_decode(H, np.array([error_rate] * n), n, syndrome)
+        logger.debug(f"Decoding: \n{decoding}")
+        cmp = decoding == error
+        cmp = cmp.all()
+        successes += int(cmp)
+
+    return successes

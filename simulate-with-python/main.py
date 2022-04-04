@@ -23,7 +23,7 @@ from simulate.make_code import (
     make_regular_ldpc_parity_check_matrix_identity,
 )
 from simulate.utils import CommandsBase, make_random_state
-from simulate.decode import simulate_frame_error_rate
+from simulate.decode import simulate_frame_error_rate, simulate_frame_error_rate_rust
 from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
@@ -65,10 +65,25 @@ class Commands(CommandsBase):
         )
 
     def command_test_rust_package(self, args: argparse.Namespace):
-        from simulate_rs import bp_decode
+        logger.info(
+            "Testing a regular (3,6+1) ldpc code with a parity check matrix of the form: H_r*k|I_r*r"
+        )
+        rng = make_random_state(args.seed)
+        runs = args.runs
+        error_rate = args.error_rate
+        k = 300  # 17669
+        r = 150  #
+        rate = k / (k + r)
+        row_weight = 6
+        column_weight = 3
+        # n = k + r
+        H = make_regular_ldpc_parity_check_matrix_identity(
+            k, r, column_weight, row_weight, rng
+        )
+        logger.info(f"Constructed a rate {rate} code")
 
-        ret = bp_decode(100, 25)
-        logger.info("Rust returned: " + ret)
+        successes = simulate_frame_error_rate_rust(H, error_rate, runs, rng)
+        logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(

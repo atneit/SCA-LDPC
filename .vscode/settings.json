@@ -7,6 +7,9 @@
         "dtype",
         "LDPC",
         "ndarray",
+        "pyarray",
+        "pyfunction",
+        "pymodule",
         "Qian",
         "rownum",
         "scipy"

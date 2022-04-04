@@ -1,6 +1,8 @@
 import numpy as np
 from ldpc import bp_decoder
-from logzero import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def simulate_frame_error_rate(

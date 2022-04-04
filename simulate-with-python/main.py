@@ -8,7 +8,11 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 # Activate logger
-from logzero import logger
+import logging, coloredlogs
+
+coloredlogs.install(level="DEBUG")
+logger = logging.getLogger(__name__.replace("__", ""))
+
 
 logger.debug("Importing dependencies...")
 
@@ -59,6 +63,12 @@ class Commands(CommandsBase):
             default=0.05,
             help="The error rate of the simulated binary symmetric channel.",
         )
+
+    def command_test_rust_package(self, args: argparse.Namespace):
+        from simulate_rs import bp_decode
+
+        ret = bp_decode(100, 25)
+        logger.info("Rust returned: " + ret)
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(

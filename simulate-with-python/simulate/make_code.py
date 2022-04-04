@@ -2,7 +2,9 @@ import sys
 import numpy as np
 from scipy.linalg import circulant
 from . import utils
-from logzero import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def fixed_weight_vec(size, samplings: int, rng):

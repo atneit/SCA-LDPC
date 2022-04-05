@@ -8,11 +8,13 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 # Activate logger
+import logging
 from logzero import logger
 
 logger.debug("Importing dependencies...")
 
 # Import dependencies
+import simulate
 from simulate.make_code import (
     make_qc_parity_check_matrix,
     make_regular_ldpc_parity_check_matrix,
@@ -20,7 +22,6 @@ from simulate.make_code import (
 )
 from simulate.utils import CommandsBase, make_random_state
 from simulate.decode import simulate_frame_error_rate, ErrorsProvider
-from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
 import argparse
@@ -187,6 +188,40 @@ class Commands(CommandsBase):
 
         successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
+
+    def command_test(self, args: argparse.Namespace):
+        """This command runs all discovered doctests in the simulate package"""
+        self.command_test_xml(args, xml=False)
+
+    def command_test_xml(self, args: argparse.Namespace, xml=True):
+        """
+        This command runs all discovered doctests in the simulate package.
+
+        Optionally with xml format output.
+        """
+        import unittest
+        import doctest
+
+        if xml:
+            import xmlrunner
+
+        suite = unittest.TestSuite()
+        suite.addTest(doctest.DocTestSuite(simulate.utils))
+        suite.addTest(doctest.DocTestSuite(simulate.make_code))
+        suite.addTest(doctest.DocTestSuite(simulate.decode))
+
+        logger.info("Disabling further logging output")
+        logging.disable(logging.CRITICAL)
+        if xml:
+            with open("report.xml", "wb") as output:
+                xmlrunner.XMLTestRunner(
+                    output=output,
+                    failfast=False,
+                    buffer=False,
+                ).run(suite)
+        else:
+            runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 0)
+            runner.run(suite)
 
 
 if __name__ == "__main__":

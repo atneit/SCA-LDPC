@@ -22,7 +22,7 @@ before_script:
 test python package:
   stage: test
   script:
-    - python main.py test
+    - python main.py test_xml
   artifacts:
     when: always
     reports:

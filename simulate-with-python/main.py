@@ -152,8 +152,19 @@ class Commands(CommandsBase):
 
     def command_test(self, args: argparse.Namespace):
         """This command runs all discovered doctests in the simulate package"""
+        self.command_test_xml(args, xml=False)
+
+    def command_test_xml(self, args: argparse.Namespace, xml=True):
+        """
+        This command runs all discovered doctests in the simulate package.
+
+        Optionally with xml format output.
+        """
         import unittest
         import doctest
+
+        if xml:
+            import xmlrunner
 
         suite = unittest.TestSuite()
         suite.addTest(doctest.DocTestSuite(simulate.utils))
@@ -162,8 +173,14 @@ class Commands(CommandsBase):
 
         logger.info("Disabling further logging output")
         logging.disable(logging.CRITICAL)
-        runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 0)
-        runner.run(suite)
+        if xml:
+            with open("report.xml", "wb") as output:
+                xmlrunner.XMLTestRunner(
+                    output=output, failfast=False, buffer=False, catchbreak=False
+                ).run(suite)
+        else:
+            runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 0)
+            runner.run(suite)
 
 
 if __name__ == "__main__":

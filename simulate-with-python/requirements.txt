@@ -10,3 +10,5 @@ scipy==1.8.0
 tomli==2.0.1
 tqdm==4.63.1
 typing-extensions==4.1.1
+lxml==4.8.0
+unittest-xml-reporting==3.2.0

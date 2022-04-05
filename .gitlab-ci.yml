@@ -14,9 +14,8 @@ cache:
     - python-virtualenv/
 
 before_script:
-  - python3 --version  # For debugging
-  - apt update && apt install -y python3-pip
-  - pip install virtualenv
+  - python3 --version # For debugging
+  - pip3 install virtualenv
   - cd simulate-with-python
   - source setup-environment.sh
 
@@ -24,3 +23,7 @@ test python package:
   stage: test
   script:
     - python main.py test
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml

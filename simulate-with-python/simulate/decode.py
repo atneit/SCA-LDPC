@@ -1,6 +1,7 @@
 import numpy as np
 from ldpc import bp_decoder
 from logzero import logger
+import itertools
 
 
 class ErrorsProvider:
@@ -98,16 +99,30 @@ class ErrorsProvider:
                     return res
                 res += 1
 
-    # TODO: potentially remove this function, it's computing average error rate among all positions
-    # for binary case
     def get_error_rate(self):
         if self.error_distribution is None:
             return self.error_rate
-        # not stable?
-        res = 0
-        for pr in self.error_distribution:
-            res += pr[0]
-        return res / len(self.error_distribution)
+        return None
+
+    def get_binary_channel_probs(self, n=None):
+        """
+        Get error distribution for each position. If parameter n is not provided,
+        function return array of distributions from the file. If n is present, function 
+        return array of length n, where array is obtained by concatenating distribution
+        array from the file with itself until length n is reached 
+        """
+        if self.error_distribution is None:
+            return [None]
+        if len(self.error_distribution[0]) != 1:
+            raise ValueError("Distribution from the file isn't binary")
+        if n is None:
+            return list(x[0] for x in self.error_distribution)
+        pr = [0] * n
+        iter = itertools.cycle(self.error_distribution)
+        for i in range(n):
+            pr[i] = next(iter)[0]
+        return pr
+
 
 
 def simulate_frame_error_rate(
@@ -130,7 +145,9 @@ def simulate_frame_error_rate(
     """
     n = H.shape[1]
     # BP decoder class. Make sure this is defined outside the loop
-    bpd = bp_decoder(H, error_rate=errors_provider.get_error_rate(), max_iter=n, bp_method="product_sum")
+    error_rate = errors_provider.get_error_rate()
+    channel_probs = errors_provider.get_binary_channel_probs(n)
+    bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum", channel_probs=channel_probs)
     error = np.zeros(n).astype(int)  # error vector
 
     successes = 0

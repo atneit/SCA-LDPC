@@ -176,7 +176,9 @@ class Commands(CommandsBase):
         if xml:
             with open("report.xml", "wb") as output:
                 xmlrunner.XMLTestRunner(
-                    output=output, failfast=False, buffer=False, catchbreak=False
+                    output=output,
+                    failfast=False,
+                    buffer=False,
                 ).run(suite)
         else:
             runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 0)

@@ -1,7 +1,3 @@
-# Official language image. Look for the different tagged releases at:
-# https://hub.docker.com/r/library/python/tags/
-image: python:latest
-
 # Change pip's cache directory to be inside the project directory since we can
 # only cache local items.
 variables:
@@ -18,7 +14,8 @@ cache:
     - python-virtualenv/
 
 before_script:
-  - python --version  # For debugging
+  - python3 --version  # For debugging
+  - apt update && apt install -y python3-pip
   - pip install virtualenv
   - cd simulate-with-python
   - source setup-environment.sh

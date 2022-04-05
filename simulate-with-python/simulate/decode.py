@@ -39,6 +39,47 @@ class ErrorsProvider:
         """
         Get error based on the distribution. Position pos is taken modulo length of file
         (if it was provided, otherwise pos is ignored).
+
+        Usage of the same error rate:
+        >>> from . import utils
+        >>> EPS = 0.009
+        >>> N = 10000
+        >>> rng = utils.make_random_state(0)
+        >>> error_rate = 0.05
+        >>> errors_provider = ErrorsProvider(error_rate, None, rng)
+        >>> s = 0
+        >>> for i in range(N):
+        ...     s += errors_provider.get_error(0)
+        >>> abs(s/N - error_rate) < EPS
+        True
+
+        Usage of binary distributions:
+        >>> errors_provider = ErrorsProvider(0.05, 'binary_distr.txt', rng)
+        >>> expected = [0.1, 0.3, 0.05, 0.14]
+        >>> all_correct = True
+        >>> for i, expect in enumerate(expected):
+        ...     s = 0
+        ...     for _ in range(N):
+        ...         s += errors_provider.get_error(i)
+        ...     all_correct = all_correct and (abs(s/N - expected[i]) < EPS)
+        >>> all_correct
+        True
+
+        Usage of q-ary distributions:
+        >>> errors_provider = ErrorsProvider(0.05, 'qary_distr.txt', rng)
+        >>> expected = [{-1: 0.2, 0: 0.5, 1: 0.3}, {-1: 0.1, 0: 0.6, 1: 0.3}]
+        >>> all_correct = True
+        >>> from collections import defaultdict
+        >>> for i, expect in enumerate(expected):
+        ...     s = defaultdict(int)
+        ...     for _ in range(N):
+        ...         e = errors_provider.get_error(i)
+        ...         s[e] += 1
+        ...     for val, prob in expect.items():
+        ...         cond = abs(s[val]/N - prob) < EPS
+        ...         all_correct = all_correct and cond
+        >>> all_correct
+        True
         """
         if self.error_distribution is None:
             return self.__get_binary_error(self.error_rate)
@@ -57,7 +98,7 @@ class ErrorsProvider:
                     return res
                 res += 1
 
-    # TODO: potentially remove this function, it's computing average error rate of among all positions
+    # TODO: potentially remove this function, it's computing average error rate among all positions
     # for binary case
     def get_error_rate(self):
         if self.error_distribution is None:
@@ -81,9 +122,10 @@ def simulate_frame_error_rate(
     >>> rng = utils.make_random_state(0)
     >>> n = 13
     >>> error_rate = 0.05
+    >>> errors_provider = ErrorsProvider(error_rate, None, rng)
     >>> runs = 100
     >>> H = rep_code(n)
-    >>> simulate_frame_error_rate(H, error_rate, runs, rng)
+    >>> simulate_frame_error_rate(H, errors_provider, runs, rng)
     100
     """
     n = H.shape[1]

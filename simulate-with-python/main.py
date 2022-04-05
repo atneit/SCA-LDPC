@@ -68,38 +68,6 @@ class Commands(CommandsBase):
             help="Input file specifying distribution of the error for different positions.",
         )
 
-    def command_test_provider(self, args: argparse.Namespace):
-        N = 10000
-        rng = make_random_state(args.seed)
-        errors_provider = ErrorsProvider(0.05, None, rng)
-        s = 0
-        for i in range(N):
-            s += errors_provider.get_error(0)
-        print(s/N)
-
-        print('Binary file:')
-        errors_provider = ErrorsProvider(0.05, 'binary_distr.txt', rng)
-        positions = 4
-        r = [0] * positions
-        for i in range(positions * N):
-            e = errors_provider.get_error(i)
-            r[i % positions] += e
-        for i in range(positions):
-            print(r[i]/N)
-
-        print('q-ary file:')
-        errors_provider = ErrorsProvider(0.05, 'qary_distr.txt', rng)
-        positions = 2
-        r = []
-        from collections import defaultdict
-        for i in range(positions):
-            r.append(defaultdict(int))
-        for i in range(positions * N):
-            e = errors_provider.get_error(i)
-            r[i % positions][e] += 1
-        for i in range(positions):
-            print('\t'.join(f'{key}: {val/N}' for key, val in r[i].items()))
-
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(
             "Testing a regular (3,6) ldpc code with a parity check matrix of the form: H_r*k"

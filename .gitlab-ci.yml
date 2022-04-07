@@ -12,15 +12,41 @@ cache:
   paths:
     - .cache/pip
     - python-virtualenv/
+    - target/
 
-before_script:
-  - python3 --version # For debugging
-  - pip3 install virtualenv
-  - pushd simulate-with-python
-  - source setup-environment.sh
-  - popd
+default:
+  before_script:
+    - source python-virtualenv/bin/activate
 
-test python package:
+
+env:create:
+  before script:
+    - echo "Override before_script"
+  script:
+    - python3 --version # For debugging
+    - cd simulate-with-python
+    - source setup-environment.sh # Also builds rust package
+  artifacts:
+    when: success
+    paths:
+      - python-virtualenv/
+  needs: []
+
+
+rust:test:
+  stage: test
+  script:
+    - cargo install cargo2junit
+    - cd simulate-with-python/simulate_rs/
+    - cargo test --target-dir ../../target/test -- -Z unstable-options --format json --report-time | cargo2junit > ../../report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+  needs: ["env:create"]
+
+
+python:test:
   stage: test
   script:
     - python simulate-with-python/main.py test_xml
@@ -28,3 +54,4 @@ test python package:
     when: always
     reports:
       junit: report.xml
+  needs: ["env:create"]

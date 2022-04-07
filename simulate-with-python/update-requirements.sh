@@ -1,3 +1,3 @@
 #!/bin/sh
 
-pip freeze --exclude simulate-rs > requirements.txt
+pip freeze | grep -v simulate-rs > requirements.txt

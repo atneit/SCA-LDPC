@@ -1,3 +1,4 @@
+use anyhow::Result;
 use log::debug;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::{pyfunction, pymodule, types::PyModule, wrap_pyfunction, PyResult, Python};
@@ -15,7 +16,7 @@ fn bp_decode<'py>(
     error_rate: PyReadonlyArray1<f64>,
     max_iter: usize,
     syndrome: PyReadonlyArray1<Alphabet>,
-) -> PyResult<&'py PyArray1<Alphabet>> {
+) -> Result<&'py PyArray1<Alphabet>> {
     debug!("Entered rust's side of implementation!");
     let parity_check = parity_check.as_array();
     let error_rate = error_rate.as_array();

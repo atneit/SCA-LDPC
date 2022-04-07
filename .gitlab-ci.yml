@@ -14,44 +14,28 @@ cache:
     - python-virtualenv/
     - target/
 
-default:
-  before_script:
-    - source python-virtualenv/bin/activate
-
-
-env:create:
-  before_script:
-    - echo "Override before_script"
-  script:
-    - python3 --version # For debugging
-    - cd simulate-with-python
-    - source setup-environment.sh # Also builds rust package
-  artifacts:
-    when: on_success
-    paths:
-      - python-virtualenv/
-  needs: []
-
 
 rust:test:
   stage: test
   script:
     - cargo install cargo2junit
     - cd simulate-with-python/simulate_rs/
-    - cargo test --target-dir ../../target/test -- -Z unstable-options --format json --report-time | cargo2junit > ../../report.xml
+    - cargo test --target-dir target/test -- 
+        -Z unstable-options --format json --report-time | 
+        cargo2junit > report.xml # Generate test report
   artifacts:
     when: always
     reports:
       junit: report.xml
-  needs: ["env:create"]
 
 
 python:test:
   stage: test
   script:
-    - python simulate-with-python/main.py test_xml
+    - python3 --version # For debugging
+    - source simulate-with-python/setup-environment.sh # Also builds rust package
+    - python simulate-with-python/main.py test_xml # Generate test report
   artifacts:
     when: always
     reports:
       junit: report.xml
-  needs: ["env:create"]

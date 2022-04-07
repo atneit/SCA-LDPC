@@ -17,6 +17,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 VENV_DEST="$SCRIPT_DIR/../python-virtualenv"
 VENV_DEST="$(realpath $VENV_DEST)"
 
+pushd "$SCRIPT_DIR"
+
 if [ ! -d "$VENV_DEST" ]; then
     echo -e "${COLOR}Couldn't find virtual environment. Creating one...${RESET}"
     python3 -m venv $VENV_DEST
@@ -31,7 +33,9 @@ pip install -r requirements.txt
 echo -e "${COLOR}Building local rust package...${RESET}"
 pushd simulate_rs
 maturin develop
-popd
+popd #simulate_rs
+
+popd #SCRIPT_DIR
 
 
 echo -e "${COLOR}Done!${RESET}"

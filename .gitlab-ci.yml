@@ -20,14 +20,14 @@ default:
 
 
 env:create:
-  before script:
+  before_script:
     - echo "Override before_script"
   script:
     - python3 --version # For debugging
     - cd simulate-with-python
     - source setup-environment.sh # Also builds rust package
   artifacts:
-    when: success
+    when: on_success
     paths:
       - python-virtualenv/
   needs: []

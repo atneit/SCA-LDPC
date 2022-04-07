@@ -8,6 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 def fixed_weight_vec(size, samplings: int, rng):
+    """
+    Returns a random vector of a fixed weight
+
+    >>> fixed_weight_vec(10, 3, utils.make_random_state(0))
+    array([1, 0, 0, 1, 0, 1, 0, 0, 0, 0])
+    """
     curr_weight = 0
     # initialize with zeroes
     a = np.zeros(size, dtype=int)
@@ -22,6 +28,17 @@ def fixed_weight_vec(size, samplings: int, rng):
 
 
 def flatten_matrix_parts(parts: np.ndarray):
+    """
+    Concatenates matrixes together
+
+    >>> flatten_matrix_parts([
+    ...    circulant(np.array([1, 0, 1])),
+    ...    circulant(np.array([0, 1, 0]))
+    ... ])
+    array([[1, 1, 0, 0, 0, 1],
+           [0, 1, 1, 1, 0, 0],
+           [1, 0, 1, 0, 1, 0]])
+    """
     # with np.printoptions(threshold=sys.maxsize):
     # for part in parts:
     # logger.debug("part: \n" + str(part))
@@ -31,7 +48,18 @@ def flatten_matrix_parts(parts: np.ndarray):
 def make_qc_parity_check_matrix(
     block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
 ):
-    """Constructs a parity check matrix H=[H_0 + H_i + I] where i is `num_blocks` and I is the identity matrix"""
+    """
+    Constructs a parity check matrix H=[H_0 + H_i + I] where i is
+    `num_blocks` and I is the identity matrix
+
+    >>> make_qc_parity_check_matrix(6, 2, 2, utils.make_random_state(0))
+    array([[1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0],
+           [0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+           [0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0],
+           [0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+           [1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
+           [0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1]])
+    """
 
     # construct the cyclic blocks
     parts = [
@@ -57,6 +85,13 @@ def make_regular_ldpc_parity_check_matrix(
 
     Code is shamelessly copied (and adapted) from:
     https://hichamjanati.github.io/pyldpc/_modules/pyldpc/code.html
+
+
+    >>> make_regular_ldpc_parity_check_matrix(6, 4, 2, 3, utils.make_random_state(0))
+    array([[1, 1, 1, 0, 0, 0],
+           [0, 0, 0, 1, 1, 1],
+           [0, 1, 1, 0, 1, 0],
+           [1, 0, 0, 1, 0, 1]])
     """
 
     if (
@@ -115,6 +150,12 @@ def make_regular_ldpc_parity_check_matrix_identity(
 
     We add identity matrix at the end, so the resulting row wight will
     be one higher than specified.
+
+    >>> make_regular_ldpc_parity_check_matrix_identity(6, 4, 2, 3, utils.make_random_state(0))
+    array([[1, 1, 1, 0, 0, 0, 1, 0, 0, 0],
+           [0, 0, 0, 1, 1, 1, 0, 1, 0, 0],
+           [0, 1, 1, 0, 1, 0, 0, 0, 1, 0],
+           [1, 0, 0, 1, 0, 1, 0, 0, 0, 1]])
     """
 
     return flatten_matrix_parts(

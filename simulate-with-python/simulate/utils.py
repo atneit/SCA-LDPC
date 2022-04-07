@@ -11,10 +11,6 @@ import numbers
 logger = logging.getLogger(__name__)
 
 
-def pretty_string_matrix(matrix: list):
-    return "[" + "\n ".join([str(row) for row in matrix]) + "]"
-
-
 def make_random_state(seed) -> np.random.RandomState:
     """Turn seed into a np.random.RandomState instance
     Parameters
@@ -24,6 +20,16 @@ def make_random_state(seed) -> np.random.RandomState:
         If seed is an int, return a new RandomState instance seeded with seed.
         If seed is already a RandomState instance, return it.
         Otherwise raise ValueError.
+
+    Integer seed gives a new deterministic state:
+    >>> rng = make_random_state(0)
+    >>> rng.randint(0, 100)
+    44
+
+    Using an existing state simply gives us back the same state:
+    >>> rng = make_random_state(rng)
+    >>> rng.randint(0, 100)
+    47
     """
     if seed is None or seed is np.random:
         return np.random.mtrand._rand

@@ -13,3 +13,5 @@ simulate-rs @ file:///tmp/.tmpHlDmof/simulate_rs-0.1.0-cp39-cp39-linux_x86_64.wh
 tomli==2.0.1
 tqdm==4.63.1
 typing-extensions==4.1.1
+lxml==4.8.0
+unittest-xml-reporting==3.2.0

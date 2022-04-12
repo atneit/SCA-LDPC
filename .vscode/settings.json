@@ -7,12 +7,15 @@
         "dtype",
         "LDPC",
         "ndarray",
+        "numpy",
         "pyarray",
         "pyfunction",
         "pymodule",
         "Qian",
         "rownum",
-        "scipy"
+        "scipy",
+        "Uninit",
+        "virtualenv"
     ],
     "python.formatting.provider": "black",
     "editor.formatOnSave": true,

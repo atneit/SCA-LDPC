@@ -14,20 +14,17 @@ cache:
     - python-virtualenv/
     - target/
 
-
 rust:test:
   stage: test
   script:
     - cargo install cargo2junit
-    - cd simulate-with-python/simulate_rs/
-    - cargo test --target-dir target/test -- 
-        -Z unstable-options --format json --report-time | 
-        cargo2junit > report.xml # Generate test report
+    - cargo test --target-dir target/test --
+      -Z unstable-options --format json --report-time |
+      cargo2junit > report.xml # Generate test report
   artifacts:
     when: always
     reports:
       junit: report.xml
-
 
 python:test:
   stage: test

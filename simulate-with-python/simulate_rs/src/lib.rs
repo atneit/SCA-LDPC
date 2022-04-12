@@ -5,7 +5,7 @@ use log::debug;
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::{pyfunction, pymodule, types::PyModule, wrap_pyfunction, PyResult, Python};
 
-mod decode;
+mod decoder;
 
 type Alphabet = u8;
 

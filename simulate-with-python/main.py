@@ -21,7 +21,7 @@ from simulate.make_code import (
     make_regular_ldpc_parity_check_matrix_identity,
 )
 from simulate.utils import CommandsBase, make_random_state
-from simulate.decode import simulate_frame_error_rate
+from simulate.decode import simulate_frame_error_rate, ErrorsProvider
 from ldpc.codes import rep_code
 import numpy as np
 import argparse
@@ -53,12 +53,19 @@ class Commands(CommandsBase):
             default=100,
             help="The number of runs to run the simulation for. Only relevant for simulations/commands that are non-deterministic.",
         )
-        parser.add_argument(
+        error_group = parser.add_mutually_exclusive_group(required=False)
+        error_group.add_argument(
             "--error-rate",
             action="store",
             type=float,
             default=0.05,
             help="The error rate of the simulated binary symmetric channel.",
+        )
+        error_group.add_argument(
+            "--error-file",
+            action="store",
+            type=str,
+            help="Input file specifying distribution of the error for different positions.",
         )
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
@@ -67,7 +74,7 @@ class Commands(CommandsBase):
         )
         rng = make_random_state(args.seed)
         runs = args.runs
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         k = 300  # 17669
         r = 150  #
         rate = k / (k + r)
@@ -79,7 +86,7 @@ class Commands(CommandsBase):
         with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
             logger.debug("Constructed parity check matrix:\n" + str(H))
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_regular_ldpc_code_identity(self, args: argparse.Namespace):
@@ -88,7 +95,7 @@ class Commands(CommandsBase):
         )
         rng = make_random_state(args.seed)
         runs = args.runs
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         k = 300  # 17669
         r = 150  #
         rate = k / (k + r)
@@ -102,7 +109,7 @@ class Commands(CommandsBase):
         with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
             logger.debug("Constructed parity check matrix:\n" + str(H))
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_qc_ldpc_code(self, args: argparse.Namespace):
@@ -111,7 +118,7 @@ class Commands(CommandsBase):
         )
         rng = make_random_state(args.seed)
         runs = args.runs
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         k = 1000  # 17669
         num_blocks = 2
         r = int(k / num_blocks)
@@ -121,7 +128,7 @@ class Commands(CommandsBase):
         )
         logger.debug("Constructed parity check matrix:\n" + str(H))
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_compute_bound(self, args: argparse.Namespace):
@@ -143,11 +150,11 @@ class Commands(CommandsBase):
         rng = make_random_state(args.seed)
 
         n = 13
-        error_rate = args.error_rate
+        errors_provider = ErrorsProvider(args.error_rate, args.error_file, rng)
         runs = args.runs
         H = rep_code(n)
 
-        successes = simulate_frame_error_rate(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate(H, errors_provider, runs, rng)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_test(self, args: argparse.Namespace):

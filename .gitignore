@@ -2,3 +2,4 @@ target
 python-virtualenv
 simulate-with-rust/target
 **.pyc
+report.xml

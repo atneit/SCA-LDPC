@@ -209,16 +209,22 @@ class Commands(CommandsBase):
 
         logger.info("Disabling further logging output")
         logging.disable(logging.CRITICAL)
+        results = None
         if xml:
             with open("report.xml", "wb") as output:
-                xmlrunner.XMLTestRunner(
+                results = xmlrunner.XMLTestRunner(
                     output=output,
                     failfast=False,
                     buffer=False,
                 ).run(suite)
         else:
             runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 0)
-            runner.run(suite)
+            results = runner.run(suite)
+
+        if results.wasSuccessful():
+            exit(0)
+        else:
+            exit(1)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@
         "curr",
         "dtype",
         "LDPC",
+        "llrs",
         "ndarray",
         "numpy",
         "pyarray",

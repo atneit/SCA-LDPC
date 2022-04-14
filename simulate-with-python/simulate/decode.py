@@ -55,7 +55,7 @@ class ErrorsProvider:
         True
 
         Usage of binary distributions:
-        >>> errors_provider = ErrorsProvider(0.05, 'binary_distr.txt', rng)
+        >>> errors_provider = ErrorsProvider(0.05, 'simulate-with-python/binary_distr.txt', rng)
         >>> expected = [0.1, 0.3, 0.05, 0.14]
         >>> all_correct = True
         >>> for i, expect in enumerate(expected):
@@ -67,7 +67,7 @@ class ErrorsProvider:
         True
 
         Usage of q-ary distributions:
-        >>> errors_provider = ErrorsProvider(0.05, 'qary_distr.txt', rng)
+        >>> errors_provider = ErrorsProvider(0.05, 'simulate-with-python/qary_distr.txt', rng)
         >>> expected = [{-1: 0.2, 0: 0.5, 1: 0.3}, {-1: 0.1, 0: 0.6, 1: 0.3}]
         >>> all_correct = True
         >>> from collections import defaultdict

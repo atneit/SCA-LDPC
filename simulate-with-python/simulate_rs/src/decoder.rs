@@ -21,8 +21,6 @@ struct VariableNode<const DC: usize, const Q: usize> {
     check_idx: [Option<usize>; DC],
     /// The a-priory channel value
     channel: Option<Message<Q>>,
-    /// The current decoded value
-    current: Option<Message<Q>>,
 }
 
 impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
@@ -30,8 +28,17 @@ impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
         Self {
             check_idx: [None; DC],
             channel: Default::default(),
-            current: Default::default(),
         }
+    }
+}
+
+impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
+    fn checks(&self, var_idx: usize) -> Vec<Key2D> {
+        self.check_idx
+            .iter()
+            .flatten()
+            .map(|check_idx| (*check_idx, var_idx).into())
+            .collect()
     }
 }
 
@@ -50,10 +57,93 @@ impl<const DV: usize> Default for CheckNode<DV> {
     }
 }
 
+impl<const DV: usize> CheckNode<DV> {
+    fn variables(&self, check_idx: usize) -> Vec<Key2D> {
+        self.variable_idx
+            .iter()
+            .flatten()
+            .map(|var_idx| (check_idx, *var_idx).into())
+            .collect()
+    }
+}
+
 type Llr = f64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Message<const Q: usize>([Llr; Q]);
+
+// Returns the arguments ordered by value
+fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
+    if in1 < in2 {
+        (in1, in2)
+    } else {
+        (in2, in1)
+    }
+}
+
+impl<const Q: usize> Message<Q> {
+    /// Runs a three-way q-ary min-function, which returns the 2 minimum values of itself and two arguments
+    fn qary_3min2(&self, incoming1: Self, incoming2: Self) -> (Self, Self) {
+        let mut min1 = Self([Llr::INFINITY; Q]);
+        let mut min2 = Self([Llr::INFINITY; Q]);
+        for q in 0..Q {
+            let t1 = self.0[q];
+            let t2 = incoming1.0[q];
+            let t3 = incoming2.0[q];
+
+            // sorting network
+            let (t1, t2) = min_max(t1, t2); // min of 1-2
+            let (t1, t3) = min_max(t1, t3); // min (1-2)-3
+            let (t2, t3) = min_max(t2, t3); // secondary min
+
+            // save min1 and min2, discard min3
+            min1.0[q] = t1;
+            min2.0[q] = t2;
+        }
+
+        (min1, min2)
+    }
+
+    /// q-ary'ily returns the given primary value, unless self equals primary, in which
+    /// case we return the secondary value.
+    fn qary_get_unequal(&self, primary: Self, secondary: Self) -> Self {
+        let mut ret = Self([Llr::INFINITY; Q]);
+        for q in 0..Q {
+            ret.0[q] = if self.0[q] != primary.0[q] {
+                primary.0[q]
+            } else {
+                secondary.0[q]
+            };
+        }
+        ret
+    }
+
+    // q-ary'ily Add self with term
+    fn qary_add(&self, term: Self) -> Self {
+        let mut ret = Self([Llr::INFINITY; Q]);
+        for q in 0..Q {
+            ret.0[q] = self.0[q] + term.0[q];
+        }
+        ret
+    }
+
+    // q-ary'ily Subtract self with subtrahend
+    fn qary_sub(&self, subtrahend: Self) -> Self {
+        let mut ret = Self([Llr::INFINITY; Q]);
+        for q in 0..Q {
+            ret.0[q] = self.0[q] - subtrahend.0[q];
+        }
+        ret
+    }
+
+    fn qary_sub_arg(&self, arg_min: usize) -> Self {
+        let mut ret = Self([Llr::INFINITY; Q]);
+        for q in 0..Q {
+            ret.0[q] = self.0[q] - self.0[arg_min];
+        }
+        ret
+    }
+}
 
 #[derive(Debug, Default, Clone)]
 struct Edge<const Q: usize> {
@@ -110,6 +200,7 @@ struct Decoder<
     edges: Container2D<Edge<Q>>,
     vn: [VariableNode<DC, Q>; N],
     cn: [CheckNode<DV>; R],
+    max_iter: u32,
 }
 
 fn make_default_array<T: Default, const E: usize>() -> [T; E] {
@@ -162,7 +253,7 @@ impl<
     const DC: usize = DC;
     const Q: usize = Q;
 
-    pub fn new(parity_check: [[GF; N]; R]) -> Self {
+    pub fn new(parity_check: [[GF; N]; R], max_iter: u32) -> Self {
         let vn: RefCell<[VariableNode<DC, Q>; N]> = RefCell::new(make_default_array());
         let cn: RefCell<[CheckNode<DV>; R]> = RefCell::new(make_default_array());
         let edges = RefCell::new(Container2D::new());
@@ -210,6 +301,7 @@ impl<
             vn,
             cn,
             edges,
+            max_iter,
         }
     }
 
@@ -218,24 +310,108 @@ impl<
         // Clone the states that we need to mutate
         let mut vn = self.vn.clone();
         let mut edges = self.edges.clone();
+        let mut hard_decision = [GF::ZERO; N];
 
-        // 1. Initialize the channel values
-        vn.iter_mut().zip(channel_llr).for_each(move |(v, m)| {
+        // 0. Initialize the channel values
+        for (var_idx, (v, m)) in vn.iter_mut().zip(channel_llr).enumerate() {
             v.channel = Some(m);
-            v.current = None;
-        });
-
-        // 2. Check node update
-        for (check_idx, check) in self.cn.iter().enumerate() {
-            let sign = 1.0;
-            let min1 = f64::INFINITY;
-            let min2 = f64::INFINITY;
-            for var_idx in check.variable_idx.iter().flatten() {
-                let var = &vn[*var_idx];
+            for (check_idx, check) in v
+                .check_idx
+                .iter()
+                .flatten()
+                .map(|check_idx| (check_idx, &self.cn[*check_idx]))
+            {
+                let key = (*check_idx, var_idx).into();
+                // We assume that only ones are present in the parity check matrix
+                assert!(self.parity_check[&key] == GF::ONE);
+                edges
+                    .get_mut(&key)
+                    .expect("(Initialization) Edge missing in tanner graph, this is a bug!")
+                    .v2c
+                    .insert(m);
             }
         }
 
-        todo!()
+        let mut it = 0;
+        loop {
+            it += 1;
+            // 1. Parity check: Compute the syndrome based on the hard_decision
+            // noop, we use only num iterations instead
+            // 2. check num iterations
+            // noop, we do it at the end of the loop instead
+            // 3. Check node update (min)
+            for (check_idx, check) in self.cn.iter().enumerate() {
+                let mut min1 = Message([f64::INFINITY; Q]);
+                let mut min2 = Message([f64::INFINITY; Q]);
+
+                // Collect connected variables
+                let connected_vars = check.variables(check_idx);
+
+                // 3.1 Find min1 and min2 values
+                for key in &connected_vars {
+                    //let key = (check_idx, var_idx).into();
+                    (min1, min2) = edges
+                        .get(key)
+                        .expect("(Check update) Edge missing in tanner graph, this is a bug!")
+                        .v2c
+                        .expect("No incoming message for check node!")
+                        .qary_3min2(min1, min2);
+                }
+
+                // 3.1 Send check messages back to variable node
+                for key in &connected_vars {
+                    //let key = (check_idx, var_idx).into();
+                    let edge = edges
+                        .get_mut(key)
+                        .expect("(Check update 2) Edge missing in tanner graph, this is a bug!");
+                    edge.c2v.replace(
+                        edge.v2c
+                            .expect("No incoming message for check node!")
+                            .qary_get_unequal(min1, min2),
+                    );
+                }
+            }
+
+            // Variable node update (sum)
+            for (var_idx, var) in vn.iter().enumerate() {
+                // Collect connected checks
+                let connected_checks = var.checks(var_idx);
+
+                // 4.1 primitive messages. Full summation
+                let mut sum: Message<Q> = var.channel.expect("Missing channel value!");
+                for key in &connected_checks {
+                    let incoming = edges
+                        .get(key)
+                        .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!")
+                        .c2v
+                        .expect("No incoming message for variable node!");
+                    sum = sum.qary_add(incoming)
+                }
+                for key in &connected_checks {
+                    // 4.2 primitive outgoing messages, subtract self for individual message
+                    let edge = edges
+                        .get_mut(key)
+                        .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!");
+                    let incoming = edge.c2v.expect("No incoming message for variable node!");
+                    let prim_out = sum.qary_sub(incoming);
+                    // 5. Message normalization
+                    let arg_min = arg_min(prim_out);
+                    let out = prim_out.qary_sub_arg(arg_min);
+                    edge.v2c.replace(out);
+                }
+
+                if it >= self.max_iter {
+                    // 6. Tentative decision
+                    hard_decision[var_idx] = arg_min_gf(sum);
+                }
+            }
+
+            if it >= self.max_iter {
+                break;
+            }
+        }
+
+        Ok(hard_decision)
     }
 
     pub fn into_llr(channel_output: &[[f64; Q]; N]) -> [Message<Q>; N] {
@@ -263,6 +439,32 @@ impl<
 
         llrs
     }
+}
+
+fn arg_min<const Q: usize>(m: Message<Q>) -> usize {
+    let mut min_val = Llr::INFINITY;
+    let mut min_arg = 0;
+    for (arg, val) in m.0.iter().copied().enumerate() {
+        if val < min_val {
+            min_val = val;
+            min_arg = arg;
+        }
+    }
+    min_arg
+}
+
+fn arg_min_gf<const Q: usize, GF: GaloisField>(m: Message<Q>) -> GF {
+    let mut min_val = Llr::INFINITY;
+    let mut min_arg = GF::ZERO;
+    let mut arg = GF::ZERO;
+    for val in m.0.iter().copied() {
+        if val < min_val {
+            min_val = val;
+            min_arg = arg;
+        }
+        arg += GF::ONE;
+    }
+    min_arg
 }
 
 #[cfg(test)]
@@ -302,11 +504,14 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new([
-            [1.into(), 1.into(), 1.into(), 1.into(), 0.into(), 0.into()],
-            [0.into(), 0.into(), 1.into(), 1.into(), 0.into(), 1.into()],
-            [1.into(), 0.into(), 0.into(), 1.into(), 1.into(), 0.into()],
-        ]);
+        let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new(
+            [
+                [1.into(), 1.into(), 1.into(), 1.into(), 0.into(), 0.into()],
+                [0.into(), 0.into(), 1.into(), 1.into(), 0.into(), 1.into()],
+                [1.into(), 0.into(), 0.into(), 1.into(), 1.into(), 0.into()],
+            ],
+            10,
+        );
 
         // Zero message with zero noise
         let mut channel_output = [[0.0; MyTinyTestDecoder::Q]; MyTinyTestDecoder::N];

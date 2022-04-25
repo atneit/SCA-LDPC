@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "ary'ily",
         "astype",
         "circulant",
         "cmds",
@@ -9,9 +10,11 @@
         "llrs",
         "ndarray",
         "numpy",
+        "probs",
         "pyarray",
         "pyfunction",
         "pymodule",
+        "qary",
         "Qian",
         "rownum",
         "scipy",

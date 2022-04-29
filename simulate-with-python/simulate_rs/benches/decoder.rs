@@ -38,10 +38,12 @@ where
 }
 
 fn decoder_benchmark(c: &mut Criterion) {
-    let decoder = MyTestDecoder::new(
-        h_from_file("simulate-with-python/simulate_rs/benches/parity_check_150_450.txt").unwrap(),
-        10,
-    );
+    let parity_check = h_from_file("benches/parity_check_150_450.txt")
+        .or_else(|_err| {
+            h_from_file("simulate-with-python/simulate_rs/benches/parity_check_150_450.txt")
+        })
+        .unwrap();
+    let decoder = MyTestDecoder::new(parity_check, 10);
 
     // Zero message with zero noise
     let mut channel_output = [[0.0; GF16::SIZE]; N];

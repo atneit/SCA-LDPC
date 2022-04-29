@@ -313,15 +313,9 @@ impl<
         // 0. Initialize the channel values
         for (var_idx, (v, m)) in vn.iter_mut().zip(channel_llr).enumerate() {
             v.channel = Some(m);
-            for (check_idx, check) in v
-                .check_idx
-                .iter()
-                .flatten()
-                .map(|check_idx| (check_idx, &self.cn[*check_idx]))
-            {
-                let key = (*check_idx, var_idx).into();
+            for key in v.checks(var_idx) {
                 // We assume that only ones are present in the parity check matrix
-                assert!(self.parity_check[&key] == GF::ONE);
+                assert!(self.parity_check.get(&key).unwrap() == &GF::ONE);
                 edges
                     .get_mut(&key)
                     .expect("(Initialization) Edge missing in tanner graph, this is a bug!")

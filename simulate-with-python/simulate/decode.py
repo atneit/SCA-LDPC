@@ -180,6 +180,9 @@ def simulate_frame_error_rate(
 def simulate_frame_error_rate_rust(
     H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
 ):
+    """
+    This function simulates an all-zero codeword with some noisy symbols
+    """
     from simulate_rs import DecoderN450R150V7C3GF16
 
     n = H.shape[1]
@@ -201,7 +204,7 @@ def simulate_frame_error_rate_rust(
     successes = 0
     run = 0
     max_errs_success = 0
-    min_errs_fail = 99999999
+    min_errs_fail = None
     while run < runs:
         errs = 0
         for i in range(n):
@@ -212,6 +215,7 @@ def simulate_frame_error_rate_rust(
                 channel_output[i, :] = good_variable
         if not errs:
             continue
+        logger.debug("Number of bad symbols")
         logger.debug(f"Channel output: \n{channel_output}")
         decoding = decoder.min_sum(channel_output)
         logger.debug(f"Decoding: \n{decoding}")
@@ -219,10 +223,14 @@ def simulate_frame_error_rate_rust(
             max_errs_success = max(errs, max_errs_success)
             successes += 1
         else:
-            min_errs_fail = min(errs, min_errs_fail)
+            min_errs_fail = min(errs, min_errs_fail) if min_errs_fail else errs
         run += 1
 
-    logger.info(f"maximum symbols corrected: {max_errs_success}")
-    logger.info(f"minimum symbols failed to correct: {min_errs_fail}")
+    logger.info(
+        f"Highest number of noisy symbols corrected, per frame: {max_errs_success}"
+    )
+    logger.info(
+        f"Lowest number of noisy symbols that failed correction: {min_errs_fail}"
+    )
 
     return successes

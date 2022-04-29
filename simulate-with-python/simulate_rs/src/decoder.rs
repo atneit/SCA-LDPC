@@ -33,12 +33,11 @@ impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
 }
 
 impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
-    fn checks(&self, var_idx: usize) -> Vec<Key2D> {
+    fn checks(&self, var_idx: usize) -> impl Iterator<Item = Key2D> + '_ {
         self.check_idx
             .iter()
             .flatten()
-            .map(|check_idx| (*check_idx, var_idx).into())
-            .collect()
+            .map(move |check_idx| (*check_idx, var_idx).into())
     }
 }
 
@@ -58,12 +57,11 @@ impl<const DV: usize> Default for CheckNode<DV> {
 }
 
 impl<const DV: usize> CheckNode<DV> {
-    fn variables(&self, check_idx: usize) -> Vec<Key2D> {
+    fn variables(&self, check_idx: usize) -> impl Iterator<Item = Key2D> + '_ {
         self.variable_idx
             .iter()
             .flatten()
-            .map(|var_idx| (check_idx, *var_idx).into())
-            .collect()
+            .map(move |var_idx| (check_idx, *var_idx).into())
     }
 }
 
@@ -344,14 +342,11 @@ impl<
                 let mut min1 = Message([f64::INFINITY; Q]);
                 let mut min2 = Message([f64::INFINITY; Q]);
 
-                // Collect connected variables
-                let connected_vars = check.variables(check_idx);
-
                 // 3.1 Find min1 and min2 values
-                for key in &connected_vars {
+                for key in check.variables(check_idx) {
                     //let key = (check_idx, var_idx).into();
                     (min1, min2) = edges
-                        .get(key)
+                        .get(&key)
                         .expect("(Check update) Edge missing in tanner graph, this is a bug!")
                         .v2c
                         .expect("No incoming message for check node!")
@@ -359,10 +354,10 @@ impl<
                 }
 
                 // 3.1 Send check messages back to variable node
-                for key in &connected_vars {
+                for key in check.variables(check_idx) {
                     //let key = (check_idx, var_idx).into();
                     let edge = edges
-                        .get_mut(key)
+                        .get_mut(&key)
                         .expect("(Check update 2) Edge missing in tanner graph, this is a bug!");
                     edge.c2v.replace(
                         edge.v2c
@@ -375,22 +370,21 @@ impl<
             // Variable node update (sum)
             for (var_idx, var) in vn.iter().enumerate() {
                 // Collect connected checks
-                let connected_checks = var.checks(var_idx);
 
                 // 4.1 primitive messages. Full summation
                 let mut sum: Message<Q> = var.channel.expect("Missing channel value!");
-                for key in &connected_checks {
+                for key in var.checks(var_idx) {
                     let incoming = edges
-                        .get(key)
+                        .get(&key)
                         .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!")
                         .c2v
                         .expect("No incoming message for variable node!");
                     sum = sum.qary_add(incoming)
                 }
-                for key in &connected_checks {
+                for key in var.checks(var_idx) {
                     // 4.2 primitive outgoing messages, subtract self for individual message
                     let edge = edges
-                        .get_mut(key)
+                        .get_mut(&key)
                         .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!");
                     let incoming = edge.c2v.expect("No incoming message for variable node!");
                     let prim_out = sum.qary_sub(incoming);

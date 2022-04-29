@@ -70,7 +70,7 @@ impl<const DV: usize> CheckNode<DV> {
 type Llr = f64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Message<const Q: usize>([Llr; Q]);
+pub struct Message<const Q: usize>([Llr; Q]);
 
 // Returns the arguments ordered by value
 fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
@@ -188,7 +188,7 @@ impl From<(Key1D, Key1D)> for Key2D {
 
 type Container2D<T> = HashMap<Key2D, T>;
 
-struct Decoder<
+pub struct Decoder<
     const N: usize,
     const R: usize,
     const DV: usize,
@@ -306,7 +306,7 @@ impl<
     }
 
     /// Formats the sum of two numbers as string.
-    pub fn product_sum(&self, channel_llr: [Message<Q>; N]) -> Result<[GF; N]> {
+    pub fn min_sum(&self, channel_llr: [Message<Q>; N]) -> Result<[GF; N]> {
         // Clone the states that we need to mutate
         let mut vn = self.vn.clone();
         let mut edges = self.edges.clone();
@@ -526,9 +526,7 @@ mod tests {
         // Convert to LLR
         let channel_llr = MyTinyTestDecoder::into_llr(&channel_output);
 
-        let res = decoder_6_3_4_3_gf16
-            .product_sum(channel_llr)
-            .expect("Failed");
+        let res = decoder_6_3_4_3_gf16.min_sum(channel_llr).expect("Failed");
 
         let expected: [GF16; 6] = [0.into(); 6];
 

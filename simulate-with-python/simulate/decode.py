@@ -180,25 +180,49 @@ def simulate_frame_error_rate(
 def simulate_frame_error_rate_rust(
     H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
 ):
-    from simulate_rs import bp_decode
+    from simulate_rs import DecoderN450R150V7C3GF16
 
     n = H.shape[1]
-    error = np.zeros(n).astype(int)  # error vector
+    q = 16
+    channel_output = np.zeros((n, q)).astype(float)  # error vector
+
+    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"))
+
+    p_linear = 1 / q
+    channel_prob = [p_linear for x in range(0, q)]
+    good_variable = np.array(channel_prob)
+    bad_variable = np.array(channel_prob)
+    good_variable[[0, 1]] = np.array([2 * p_linear, 0])
+    bad_variable[[-1, -2]] = np.array([2 * p_linear, 0])
+
+    logger.debug(f"Good variable: \n{good_variable}")
+    logger.debug(f"Bad variable: \n{bad_variable}")
 
     successes = 0
-    for _ in range(runs):
+    run = 0
+    max_errs_success = 0
+    min_errs_fail = 99999999
+    while run < runs:
+        errs = 0
         for i in range(n):
             if rng.rand() < error_rate:
-                error[i] = 1
+                channel_output[i, :] = bad_variable
+                errs += 1
             else:
-                error[i] = 0
-        syndrome = H @ error % 2  # calculates the error syndrome
-        logger.debug(f"Error: \n{error}")
-        logger.debug(f"Syndrome: \n{syndrome}")
-        decoding = bp_decode(H, np.array([error_rate] * n), n, syndrome)
+                channel_output[i, :] = good_variable
+        if not errs:
+            continue
+        logger.debug(f"Channel output: \n{channel_output}")
+        decoding = decoder.min_sum(channel_output)
         logger.debug(f"Decoding: \n{decoding}")
-        cmp = decoding == error
-        cmp = cmp.all()
-        successes += int(cmp)
+        if decoding == [0] * n:
+            max_errs_success = max(errs, max_errs_success)
+            successes += 1
+        else:
+            min_errs_fail = min(errs, min_errs_fail)
+        run += 1
+
+    logger.info(f"maximum symbols corrected: {max_errs_success}")
+    logger.info(f"minimum symbols failed to correct: {min_errs_fail}")
 
     return successes

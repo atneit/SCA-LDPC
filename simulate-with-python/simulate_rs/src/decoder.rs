@@ -184,7 +184,8 @@ impl From<(Key1D, Key1D)> for Key2D {
     }
 }
 
-type Container2D<T> = HashMap<Key2D, T>;
+type Container2D<T> = rustc_hash::FxHashMap<Key2D, T>;
+//type Container2D<T> = HashMap<Key2D, T>;
 
 pub struct Decoder<
     const N: usize,
@@ -254,7 +255,7 @@ impl<
     pub fn new(parity_check: [[GF; N]; R], max_iter: u32) -> Self {
         let vn: RefCell<[VariableNode<DC, Q>; N]> = RefCell::new(make_default_array());
         let cn: RefCell<[CheckNode<DV>; R]> = RefCell::new(make_default_array());
-        let edges = RefCell::new(Container2D::new());
+        let edges = RefCell::new(Container2D::default());
 
         let parity_check: Container2D<GF> = IntoIterator::into_iter(parity_check)
             .enumerate()

@@ -3,3 +3,7 @@
 members = [
     "simulate-with-python/simulate_rs",
 ]
+
+
+[profile.bench]
+debug = true

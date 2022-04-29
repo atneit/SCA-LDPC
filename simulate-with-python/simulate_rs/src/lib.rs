@@ -6,9 +6,8 @@ use log::debug;
 use numpy::PyReadonlyArray2;
 use pyo3::{pyclass, pymethods, pymodule, types::PyModule, PyResult, Python};
 
-use crate::decoder::Decoder;
-
 mod decoder;
+pub use decoder::Decoder;
 
 g2p::g2p!(GF16, 4, modulus: 0b10011);
 

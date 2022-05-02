@@ -191,6 +191,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
+name = "fastcmp"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89ef83431fa62297ccdf10b7d18afb63ac26d7dd192598d6ab204b595475f9de"
+
+[[package]]
 name = "g2gen"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -727,6 +733,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "criterion",
+ "fastcmp",
  "g2p",
  "log",
  "ndarray",

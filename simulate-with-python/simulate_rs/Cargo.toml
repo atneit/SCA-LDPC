@@ -18,6 +18,7 @@ ndarray = "0.15.4"
 g2p = "0.4.0"
 ordered-float = "2.10.0"
 rustc-hash = "*"
+fastcmp = "1.0.1"
 
 [dev-dependencies]
 criterion = { version="0.3", features = ["html_reports"] }

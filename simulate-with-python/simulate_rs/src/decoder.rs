@@ -1,5 +1,11 @@
 #![allow(unused)]
 
+use anyhow::Result;
+use fastcmp::Compare;
+use g2p::GaloisField;
+use ndarray::Array1;
+use numpy::ndarray::{ArrayView1, ArrayView2};
+use ordered_float::NotNan;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -7,12 +13,6 @@ use std::{
     env::VarError,
     mem::{self, transmute, MaybeUninit},
 };
-
-use anyhow::Result;
-use g2p::GaloisField;
-use ndarray::Array1;
-use numpy::ndarray::{ArrayView1, ArrayView2};
-use ordered_float::NotNan;
 
 macro_rules! debug_unwrap {
     ($what:expr) => {{
@@ -164,7 +164,8 @@ struct Edge<const Q: usize> {
 
 type Key1D = u32;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[allow(clippy::derive_hash_xor_eq)]
+#[derive(Debug, Eq, Hash, Clone, Copy)]
 struct Key2D {
     row: Key1D,
     col: Key1D,
@@ -176,6 +177,18 @@ impl Key2D {
     }
     fn col(&self) -> usize {
         self.col as usize
+    }
+}
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts((p as *const T) as *const u8, ::std::mem::size_of::<T>())
+}
+
+impl PartialEq for Key2D {
+    fn eq(&self, other: &Self) -> bool {
+        let self_bytes = unsafe { any_as_u8_slice(self) };
+        let other_bytes = unsafe { any_as_u8_slice(other) };
+        self_bytes.feq(other_bytes)
     }
 }
 

@@ -31,7 +31,7 @@ macro_rules! debug_unwrap {
 #[derive(Debug, Clone)]
 struct VariableNode<const DC: usize, const Q: usize> {
     /// options to deal with irregular codes
-    check_idx: [Option<usize>; DC],
+    check_idx: [Option<Key1D>; DC],
     /// The a-priory channel value
     channel: Option<Message<Q>>,
 }
@@ -46,7 +46,7 @@ impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
 }
 
 impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
-    fn checks(&self, var_idx: usize) -> impl Iterator<Item = Key2D> + '_ {
+    fn checks(&self, var_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.check_idx
             .iter()
             .flatten()
@@ -58,7 +58,7 @@ impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
 #[derive(Debug)]
 struct CheckNode<const DV: usize> {
     /// options to deal with initialization and irregular codes
-    variable_idx: [Option<usize>; DV],
+    variable_idx: [Option<Key1D>; DV],
 }
 
 impl<const DV: usize> Default for CheckNode<DV> {
@@ -70,7 +70,7 @@ impl<const DV: usize> Default for CheckNode<DV> {
 }
 
 impl<const DV: usize> CheckNode<DV> {
-    fn variables(&self, check_idx: usize) -> impl Iterator<Item = Key2D> + '_ {
+    fn variables(&self, check_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.variable_idx
             .iter()
             .flatten()
@@ -162,7 +162,7 @@ struct Edge<const Q: usize> {
     c2v: Option<Message<Q>>,
 }
 
-type Key1D = u32;
+type Key1D = u16;
 
 #[allow(clippy::derive_hash_xor_eq)]
 #[derive(Debug, Eq, Hash, Clone, Copy)]
@@ -305,13 +305,13 @@ impl<
                         // add the check index to the variable
                         insert_first_none::<_, DC>(
                             &mut vn.borrow_mut()[ij.col()].check_idx,
-                            ij.row(),
+                            ij.row,
                         );
 
                         // add the variable index to the check
                         insert_first_none::<_, DV>(
                             &mut cn.borrow_mut()[ij.row()].variable_idx,
-                            ij.col(),
+                            ij.col,
                         );
 
                         (ij, h)
@@ -344,7 +344,7 @@ impl<
         let mut hard_decision = [GF::ZERO; N];
 
         // 0. Initialize the channel values
-        for (var_idx, (v, m)) in vn.iter_mut().zip(channel_llr).enumerate() {
+        for (var_idx, (v, m)) in (0..).zip(vn.iter_mut().zip(channel_llr)) {
             v.channel = Some(m);
             for key in v.checks(var_idx) {
                 // We assume that only ones are present in the parity check matrix
@@ -361,7 +361,7 @@ impl<
             // 2. check num iterations
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
-            for (check_idx, check) in self.cn.iter().enumerate() {
+            for (check_idx, check) in (0..).zip(&self.cn) {
                 let mut min1 = Message([FloatType::INFINITY; Q]);
                 let mut min2 = Message([FloatType::INFINITY; Q]);
 
@@ -382,7 +382,7 @@ impl<
             }
 
             // Variable node update (sum)
-            for (var_idx, var) in vn.iter().enumerate() {
+            for (var_idx, var) in (0..).zip(&vn) {
                 // Collect connected checks
 
                 // 4.1 primitive messages. Full summation
@@ -404,7 +404,7 @@ impl<
 
                 if it >= self.max_iter {
                     // 6. Tentative decision
-                    hard_decision[var_idx] = arg_min_gf(sum);
+                    hard_decision[var_idx as usize] = arg_min_gf(sum);
                 }
             }
 

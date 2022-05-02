@@ -6,6 +6,7 @@
         "cmds",
         "curr",
         "dtype",
+        "fastcmp",
         "LDPC",
         "llrs",
         "mtrand",
@@ -20,6 +21,7 @@
         "qary",
         "Qian",
         "rownum",
+        "rustc",
         "scipy",
         "Uninit",
         "virtualenv"

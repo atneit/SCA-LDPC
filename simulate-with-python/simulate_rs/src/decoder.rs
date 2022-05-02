@@ -14,6 +14,19 @@ use ndarray::Array1;
 use numpy::ndarray::{ArrayView1, ArrayView2};
 use ordered_float::NotNan;
 
+macro_rules! debug_unwrap {
+    ($what:expr) => {{
+        #[cfg(debug_assertions)]
+        {
+            $what.unwrap()
+        }
+        #[cfg(not(debug_assertions))]
+        unsafe {
+            $what.unwrap_unchecked()
+        }
+    }};
+}
+
 /// A variable node
 #[derive(Debug, Clone)]
 struct VariableNode<const DC: usize, const Q: usize> {
@@ -168,9 +181,11 @@ impl Key2D {
 
 impl From<(usize, usize)> for Key2D {
     fn from(from: (usize, usize)) -> Self {
-        Self {
-            row: from.0.try_into().expect("Index 1 too large!"),
-            col: from.1.try_into().expect("Index 2 too large!"),
+        unsafe {
+            Self {
+                row: debug_unwrap!(from.0.try_into()),
+                col: debug_unwrap!(from.1.try_into()),
+            }
         }
     }
 }
@@ -305,6 +320,10 @@ impl<
     }
 
     /// Formats the sum of two numbers as string.
+    ///
+    /// # Safety
+    ///
+    /// This function is safe to use if it does not panic in debug builds!
     pub fn min_sum(&self, channel_llr: [Message<Q>; N]) -> Result<[GF; N]> {
         // Clone the states that we need to mutate
         let mut vn = self.vn.clone();
@@ -317,11 +336,7 @@ impl<
             for key in v.checks(var_idx) {
                 // We assume that only ones are present in the parity check matrix
                 assert!(self.parity_check.get(&key).unwrap() == &GF::ONE);
-                edges
-                    .get_mut(&key)
-                    .expect("(Initialization) Edge missing in tanner graph, this is a bug!")
-                    .v2c
-                    .insert(m);
+                debug_unwrap!(edges.get_mut(&key)).v2c.insert(m);
             }
         }
 
@@ -340,25 +355,16 @@ impl<
                 // 3.1 Find min1 and min2 values
                 for key in check.variables(check_idx) {
                     //let key = (check_idx, var_idx).into();
-                    (min1, min2) = edges
-                        .get(&key)
-                        .expect("(Check update) Edge missing in tanner graph, this is a bug!")
-                        .v2c
-                        .expect("No incoming message for check node!")
-                        .qary_3min2(min1, min2);
+                    (min1, min2) =
+                        debug_unwrap!(debug_unwrap!(edges.get(&key)).v2c).qary_3min2(min1, min2);
                 }
 
                 // 3.1 Send check messages back to variable node
                 for key in check.variables(check_idx) {
                     //let key = (check_idx, var_idx).into();
-                    let edge = edges
-                        .get_mut(&key)
-                        .expect("(Check update 2) Edge missing in tanner graph, this is a bug!");
-                    edge.c2v.replace(
-                        edge.v2c
-                            .expect("No incoming message for check node!")
-                            .qary_get_unequal(min1, min2),
-                    );
+                    let edge = debug_unwrap!(edges.get_mut(&key));
+                    edge.c2v
+                        .replace(debug_unwrap!(edge.v2c).qary_get_unequal(min1, min2));
                 }
             }
 
@@ -369,19 +375,13 @@ impl<
                 // 4.1 primitive messages. Full summation
                 let mut sum: Message<Q> = var.channel.expect("Missing channel value!");
                 for key in var.checks(var_idx) {
-                    let incoming = edges
-                        .get(&key)
-                        .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!")
-                        .c2v
-                        .expect("No incoming message for variable node!");
+                    let incoming = debug_unwrap!(debug_unwrap!(edges.get(&key)).c2v);
                     sum = sum.qary_add(incoming)
                 }
                 for key in var.checks(var_idx) {
                     // 4.2 primitive outgoing messages, subtract self for individual message
-                    let edge = edges
-                        .get_mut(&key)
-                        .expect("(Variable update 1) Edge missing in tanner graph, this is a bug!");
-                    let incoming = edge.c2v.expect("No incoming message for variable node!");
+                    let edge = debug_unwrap!(edges.get_mut(&key));
+                    let incoming = debug_unwrap!(edge.c2v);
                     let prim_out = sum.qary_sub(incoming);
                     // 5. Message normalization
                     let arg_min = arg_min(prim_out);

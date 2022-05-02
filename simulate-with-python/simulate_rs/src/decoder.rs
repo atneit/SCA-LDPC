@@ -78,10 +78,10 @@ impl<const DV: usize> CheckNode<DV> {
     }
 }
 
-type Llr = f64;
+type FloatType = f64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Message<const Q: usize>([Llr; Q]);
+pub struct Message<const Q: usize>([FloatType; Q]);
 
 // Returns the arguments ordered by value
 fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
@@ -95,8 +95,8 @@ fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
 impl<const Q: usize> Message<Q> {
     /// Runs a three-way q-ary min-function, which returns the 2 minimum values of itself and two arguments
     fn qary_3min2(&self, incoming1: Self, incoming2: Self) -> (Self, Self) {
-        let mut min1 = Self([Llr::INFINITY; Q]);
-        let mut min2 = Self([Llr::INFINITY; Q]);
+        let mut min1 = Self([FloatType::INFINITY; Q]);
+        let mut min2 = Self([FloatType::INFINITY; Q]);
         for q in 0..Q {
             let t1 = self.0[q];
             let t2 = incoming1.0[q];
@@ -118,7 +118,7 @@ impl<const Q: usize> Message<Q> {
     /// q-ary'ily returns the given primary value, unless self equals primary, in which
     /// case we return the secondary value.
     fn qary_get_unequal(&self, primary: Self, secondary: Self) -> Self {
-        let mut ret = Self([Llr::INFINITY; Q]);
+        let mut ret = Self([FloatType::INFINITY; Q]);
         for q in 0..Q {
             ret.0[q] = if self.0[q] != primary.0[q] {
                 primary.0[q]
@@ -131,7 +131,7 @@ impl<const Q: usize> Message<Q> {
 
     // q-ary'ily Add self with term
     fn qary_add(&self, term: Self) -> Self {
-        let mut ret = Self([Llr::INFINITY; Q]);
+        let mut ret = Self([FloatType::INFINITY; Q]);
         for q in 0..Q {
             ret.0[q] = self.0[q] + term.0[q];
         }
@@ -140,7 +140,7 @@ impl<const Q: usize> Message<Q> {
 
     // q-ary'ily Subtract self with subtrahend
     fn qary_sub(&self, subtrahend: Self) -> Self {
-        let mut ret = Self([Llr::INFINITY; Q]);
+        let mut ret = Self([FloatType::INFINITY; Q]);
         for q in 0..Q {
             ret.0[q] = self.0[q] - subtrahend.0[q];
         }
@@ -148,7 +148,7 @@ impl<const Q: usize> Message<Q> {
     }
 
     fn qary_sub_arg(&self, arg_min: usize) -> Self {
-        let mut ret = Self([Llr::INFINITY; Q]);
+        let mut ret = Self([FloatType::INFINITY; Q]);
         for q in 0..Q {
             ret.0[q] = self.0[q] - self.0[arg_min];
         }
@@ -362,8 +362,8 @@ impl<
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
             for (check_idx, check) in self.cn.iter().enumerate() {
-                let mut min1 = Message([f64::INFINITY; Q]);
-                let mut min2 = Message([f64::INFINITY; Q]);
+                let mut min1 = Message([FloatType::INFINITY; Q]);
+                let mut min2 = Message([FloatType::INFINITY; Q]);
 
                 // 3.1 Find min1 and min2 values
                 for key in check.variables(check_idx) {
@@ -416,11 +416,11 @@ impl<
         Ok(hard_decision)
     }
 
-    pub fn into_llr(channel_output: &[[f64; Q]; N]) -> [Message<Q>; N] {
-        const EPSILON: f64 = 0.001;
+    pub fn into_llr(channel_output: &[[FloatType; Q]; N]) -> [Message<Q>; N] {
+        const EPSILON: FloatType = 0.001;
         let mut llrs = [Message::<Q>([0.0; Q]); N];
         for (var, msg) in channel_output.iter().zip(llrs.iter_mut()) {
-            let sum: f64 = var.iter().sum();
+            let sum: FloatType = var.iter().sum();
             let max = var
                 .iter()
                 .copied()
@@ -444,7 +444,7 @@ impl<
 }
 
 fn arg_min<const Q: usize>(m: Message<Q>) -> usize {
-    let mut min_val = Llr::INFINITY;
+    let mut min_val = FloatType::INFINITY;
     let mut min_arg = 0;
     for (arg, val) in m.0.iter().copied().enumerate() {
         if val < min_val {
@@ -456,7 +456,7 @@ fn arg_min<const Q: usize>(m: Message<Q>) -> usize {
 }
 
 fn arg_min_gf<const Q: usize, GF: GaloisField>(m: Message<Q>) -> GF {
-    let mut min_val = Llr::INFINITY;
+    let mut min_val = FloatType::INFINITY;
     let mut min_arg = GF::ZERO;
     let mut arg = GF::ZERO;
     for val in m.0.iter().copied() {
@@ -484,10 +484,10 @@ mod tests {
         ]; MyTinyTestDecoder::N];
         let llr = MyTinyTestDecoder::into_llr(&channel_output);
         let expected = [Message([
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
             0.0,
             0.0,
             0.0,
@@ -496,10 +496,10 @@ mod tests {
             0.0,
             0.0,
             1.9459101490553135,
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
+            FloatType::INFINITY,
         ]); MyTinyTestDecoder::N];
         assert_eq!(expected, llr);
     }

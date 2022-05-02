@@ -7,7 +7,7 @@ use numpy::PyReadonlyArray2;
 use pyo3::{pyclass, pymethods, pymodule, types::PyModule, PyResult, Python};
 
 mod decoder;
-pub use decoder::Decoder;
+pub use decoder::{Decoder, FloatType};
 
 g2p::g2p!(GF16, 4, modulus: 0b10011);
 
@@ -46,7 +46,7 @@ macro_rules! register_py_decoder_class {
                 })
             }
 
-            fn min_sum(&self, py_channel_output: PyReadonlyArray2<f64>) -> Result<Vec<u8>> {
+            fn min_sum(&self, py_channel_output: PyReadonlyArray2<FloatType>) -> Result<Vec<u8>> {
                 let py_channel_output = py_channel_output.as_array();
                 let mut channel_output = [[0.0; { $GF::SIZE }]; $N];
                 for variable in 0..channel_output.len() {

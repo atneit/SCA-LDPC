@@ -78,7 +78,7 @@ impl<const DV: usize> CheckNode<DV> {
     }
 }
 
-type FloatType = f64;
+pub type FloatType = f32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Message<const Q: usize>([FloatType; Q]);
@@ -495,7 +495,8 @@ mod tests {
             0.0,
             0.0,
             0.0,
-            1.9459101490553135,
+            //1.9459101490553135,
+            1.945_910_1,
             FloatType::INFINITY,
             FloatType::INFINITY,
             FloatType::INFINITY,

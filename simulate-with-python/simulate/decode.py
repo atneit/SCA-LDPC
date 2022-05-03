@@ -187,9 +187,9 @@ def simulate_frame_error_rate_rust(
 
     n = H.shape[1]
     q = 16
-    channel_output = np.zeros((n, q)).astype(float)  # error vector
+    channel_output = np.zeros((n, q)).astype(np.float32)  # error vector
 
-    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"))
+    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"), 5)
 
     p_linear = 1 / q
     channel_prob = [p_linear for x in range(0, q)]
@@ -200,6 +200,8 @@ def simulate_frame_error_rate_rust(
 
     logger.debug(f"Good variable: \n{good_variable}")
     logger.debug(f"Bad variable: \n{bad_variable}")
+
+    logger.info(f"Starting {runs} decoding calls with random noise...")
 
     successes = 0
     run = 0

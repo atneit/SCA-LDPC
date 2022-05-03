@@ -9,8 +9,20 @@ use pyo3::{pyclass, pymethods, pymodule, types::PyModule, PyResult, Python};
 mod decoder;
 pub use decoder::{Decoder, FloatType};
 
+// Use this macro to generate a new Galois Field
 g2p::g2p!(GF16, 4, modulus: 0b10011);
 
+/// Use this macro to create new decoders for different sizes/parameters
+///
+/// # Usage:
+///
+/// register_py_decoder_class!(module <= Name{
+///     N: <number of variable nodes>,
+///     R: <number of check nodes>,
+///     DV: <Maximum variable node degree (num checks, per variable)>,
+///     DC: <Maximum check node degree (num variables, per check)>,
+///     GF: Galois Field to operate on. ("Q" submessages)
+/// });
 macro_rules! register_py_decoder_class {
     ($m:ident <= $Name:ident{N: $N:literal, R: $R:literal, DV: $DV:literal, DC: $DC:literal, GF: $GF:ident}) => {{
         type CustomDecoder = Decoder<$N, $R, $DV, $DC, { $GF::SIZE }, $GF>;
@@ -23,7 +35,7 @@ macro_rules! register_py_decoder_class {
         #[pymethods]
         impl $Name {
             #[new]
-            fn new(py_parity_check: PyReadonlyArray2<u8>) -> Result<Self> {
+            fn new(py_parity_check: PyReadonlyArray2<u8>, iterations: u32) -> Result<Self> {
                 let py_parity_check = py_parity_check.as_array();
                 ::log::info!(
                     "Constructing decoder {} with N={N}, R={R}, DV={DV}, DC={DC}, GF={GF}, Input parity check matrix has the shape: {shape:?}",
@@ -42,7 +54,7 @@ macro_rules! register_py_decoder_class {
                     }
                 }
                 Ok($Name {
-                    decoder: Decoder::new(parity_check, 10),
+                    decoder: Decoder::new(parity_check, iterations),
                 })
             }
 
@@ -71,6 +83,7 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     // A good place to install the Rust -> Python logger.
     pyo3_log::init();
 
+    // Create a tiny toy example
     register_py_decoder_class!(
         m <= DecoderN6R3V4C3GF16 {
             N: 6,
@@ -81,6 +94,7 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
         }
     );
 
+    // A slightly larger decoder for testing
     register_py_decoder_class!(
         m <= DecoderN450R150V7C3GF16 {
             N: 450,

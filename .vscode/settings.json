@@ -12,6 +12,7 @@
         "mtrand",
         "ndarray",
         "numpy",
+        "parallelizable",
         "probs",
         "pyarray",
         "pyclass",
@@ -23,6 +24,7 @@
         "rownum",
         "rustc",
         "scipy",
+        "submessages",
         "Uninit",
         "virtualenv"
     ],

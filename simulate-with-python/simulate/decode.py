@@ -1,3 +1,4 @@
+from concurrent.futures import as_completed
 import numpy as np
 from ldpc import bp_decoder
 import logging
@@ -178,12 +179,20 @@ def simulate_frame_error_rate(
 
 
 def simulate_frame_error_rate_rust(
-    H: np.ndarray, error_rate: float, runs: int, rng: np.random.RandomState
+    H: np.ndarray,
+    error_rate: float,
+    runs: int,
+    rng: np.random.RandomState,
+    threads: int,
 ):
     """
     This function simulates an all-zero codeword with some noisy symbols
     """
     from simulate_rs import DecoderN450R150V7C3GF16
+    from concurrent.futures import (
+        ThreadPoolExecutor,
+        as_completed,
+    )
 
     n = H.shape[1]
     q = 16
@@ -201,32 +210,40 @@ def simulate_frame_error_rate_rust(
     logger.debug(f"Good variable: \n{good_variable}")
     logger.debug(f"Bad variable: \n{bad_variable}")
 
-    logger.info(f"Starting {runs} decoding calls with random noise...")
+    logger.info(
+        f"Starting {runs} decoding calls with random noise, using {threads} threads..."
+    )
 
-    successes = 0
-    run = 0
-    max_errs_success = 0
-    min_errs_fail = None
-    while run < runs:
-        errs = 0
-        for i in range(n):
-            if rng.rand() < error_rate:
-                channel_output[i, :] = bad_variable
-                errs += 1
+    with ThreadPoolExecutor(threads) as executor:
+        run = 0
+        decoding_map = {}
+        while run < runs:
+            errs = 0
+            for i in range(n):
+                if rng.rand() < error_rate:
+                    channel_output[i, :] = bad_variable
+                    errs += 1
+                else:
+                    channel_output[i, :] = good_variable
+            if not errs:
+                continue
+            logger.debug("Number of bad symbols")
+            logger.debug(f"Channel output: \n{channel_output}")
+            decoding_map[executor.submit(decoder.min_sum, channel_output.copy())] = errs
+            run += 1
+
+        successes = 0
+        max_errs_success = 0
+        min_errs_fail = None
+        for future in as_completed(decoding_map):
+            errs = decoding_map[future]
+            decoding = future.result()
+            logger.debug(f"Decoding: \n{decoding}")
+            if decoding == [0] * n:
+                max_errs_success = max(errs, max_errs_success)
+                successes += 1
             else:
-                channel_output[i, :] = good_variable
-        if not errs:
-            continue
-        logger.debug("Number of bad symbols")
-        logger.debug(f"Channel output: \n{channel_output}")
-        decoding = decoder.min_sum(channel_output)
-        logger.debug(f"Decoding: \n{decoding}")
-        if decoding == [0] * n:
-            max_errs_success = max(errs, max_errs_success)
-            successes += 1
-        else:
-            min_errs_fail = min(errs, min_errs_fail) if min_errs_fail else errs
-        run += 1
+                min_errs_fail = min(errs, min_errs_fail) if min_errs_fail else errs
 
     logger.info(
         f"Highest number of noisy symbols corrected, per frame: {max_errs_success}"

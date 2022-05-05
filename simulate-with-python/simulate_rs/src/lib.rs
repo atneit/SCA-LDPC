@@ -58,18 +58,26 @@ macro_rules! register_py_decoder_class {
                 })
             }
 
-            fn min_sum(&self, py_channel_output: PyReadonlyArray2<FloatType>) -> Result<Vec<u8>> {
+            /// min_sum algorithm
+            ///
+            /// This method is parallelizable from python.
+            ///
+            /// Attempts have  been made to make this function parallel from within,
+            /// but that resulted in performance loss
+            fn min_sum(&self, py: Python<'_>, py_channel_output: PyReadonlyArray2<FloatType>) -> Result<Vec<u8>> {
                 let py_channel_output = py_channel_output.as_array();
-                let mut channel_output = [[0.0; { $GF::SIZE }]; $N];
-                for variable in 0..channel_output.len() {
-                    for value in 0..channel_output[variable].len() {
-                        channel_output[variable][value] = py_channel_output[(variable, value)].into();
+                py.allow_threads(||{
+                    let mut channel_output = [[0.0; { $GF::SIZE }]; $N];
+                    for variable in 0..channel_output.len() {
+                        for value in 0..channel_output[variable].len() {
+                            channel_output[variable][value] = py_channel_output[(variable, value)].into();
+                        }
                     }
-                }
-                let channel_llr = CustomDecoder::into_llr(&channel_output);
-                let l = self.decoder.min_sum(channel_llr)?;
-                let res: Vec<u8> = l.iter().copied().map(GF16::into).collect();
-                Ok(res)
+                    let channel_llr = CustomDecoder::into_llr(&channel_output);
+                    let l = self.decoder.min_sum(channel_llr)?;
+                    let res: Vec<u8> = l.iter().copied().map(GF16::into).collect();
+                    Ok(res)
+                })
             }
         }
 

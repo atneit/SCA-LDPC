@@ -75,6 +75,13 @@ class Commands(CommandsBase):
             type=str,
             help="Input file specifying distribution of the error for different positions.",
         )
+        error_group.add_argument(
+            "--threads",
+            action="store",
+            type=int,
+            help="Number of threads to run decoders on",
+            default=4,
+        )
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(
@@ -83,6 +90,7 @@ class Commands(CommandsBase):
         rng = make_random_state(args.seed)
         runs = args.runs
         error_rate = args.error_rate
+        threads = args.threads
         k = 300  # 17669
         r = 150  #
         rate = k / (k + r)
@@ -94,7 +102,7 @@ class Commands(CommandsBase):
         )
         logger.info(f"Constructed a rate {rate} code")
 
-        successes = simulate_frame_error_rate_rust(H, error_rate, runs, rng)
+        successes = simulate_frame_error_rate_rust(H, error_rate, runs, rng, threads)
         logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):

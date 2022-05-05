@@ -386,7 +386,7 @@ impl<
                 // Collect connected checks
 
                 // 4.1 primitive messages. Full summation
-                let mut sum: Message<Q> = var.channel.expect("Missing channel value!");
+                let mut sum: Message<Q> = debug_unwrap!(var.channel);
                 for key in var.checks(var_idx) {
                     let incoming = debug_unwrap!(debug_unwrap!(edges.get(&key)).c2v);
                     sum = sum.qary_add(incoming)

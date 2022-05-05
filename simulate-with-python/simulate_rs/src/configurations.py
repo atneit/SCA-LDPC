@@ -53,5 +53,5 @@ while not finish:
         # sum(d_values) is equal to 0
         d_values[l-1] = -d
         send_d_values(connected_vars, d_values, beta, check_idx)
-    finish = increment_d_values(d_values, i)
+    finish = increment_d_values(d_values, l-1)
 print(beta)

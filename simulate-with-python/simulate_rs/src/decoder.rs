@@ -27,6 +27,7 @@ macro_rules! debug_unwrap {
     }};
 }
 
+// TODO: change Q
 /// A variable node
 #[derive(Debug, Clone)]
 struct VariableNode<const DC: usize, const Q: usize> {
@@ -372,6 +373,7 @@ impl<
                         debug_unwrap!(debug_unwrap!(edges.get(&key)).v2c).qary_3min2(min1, min2);
                 }
 
+                // TODO: make single loop
                 // 3.1 Send check messages back to variable node
                 for key in check.variables(check_idx) {
                     //let key = (check_idx, var_idx).into();

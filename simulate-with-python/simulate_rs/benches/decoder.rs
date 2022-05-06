@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use g2p::GaloisField;
 use simulate_rs::Decoder;
 use std::{
     fs::File,
@@ -10,27 +9,26 @@ use std::{
     path::Path,
 };
 
-g2p::g2p!(GF16, 4, modulus: 0b10011);
-
 const N: usize = 450;
 const R: usize = 150;
 const DV: usize = 7;
 const DC: usize = 3;
+const B: usize = 7;
+const Q: usize = B * 2 + 1;
 
-type MyTestDecoder = Decoder<N, R, DV, DC, { GF16::SIZE }, GF16>;
+type MyTestDecoder = Decoder<N, R, DV, DC, Q, B, i8>;
 
-fn h_from_file<P, const N: usize, const R: usize, GF>(path: P) -> Result<[[GF; N]; R]>
+fn h_from_file<P, const N: usize, const R: usize>(path: P) -> Result<[[bool; N]; R]>
 where
     P: AsRef<Path>,
-    GF: GaloisField + std::convert::From<u8>,
 {
-    let mut ret = [[GF::ZERO; N]; R];
+    let mut ret = [[false; N]; R];
     let file = File::open(path.as_ref())?;
     let reader = BufReader::new(file);
     for (row, line) in reader.lines().enumerate() {
         for (column, value) in line?.split_whitespace().enumerate() {
             let int: u8 = value.parse()?;
-            ret[row][column] = int.into();
+            ret[row][column] = int != 0;
         }
     }
 
@@ -46,7 +44,7 @@ fn decoder_benchmark(c: &mut Criterion) {
     let decoder = MyTestDecoder::new(parity_check, 10);
 
     // Zero message with zero noise
-    let mut channel_output = [[0.0; GF16::SIZE]; N];
+    let mut channel_output = [[0.0; Q]; N];
     for el in &mut channel_output {
         el[0] = 1.0;
     }

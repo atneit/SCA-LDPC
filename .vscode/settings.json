@@ -2,6 +2,8 @@
     "cSpell.words": [
         "ary'ily",
         "astype",
+        "bneg",
+        "btype",
         "circulant",
         "cmds",
         "curr",
@@ -21,6 +23,7 @@
         "pymodule",
         "qary",
         "Qian",
+        "Quary",
         "rownum",
         "rustc",
         "scipy",

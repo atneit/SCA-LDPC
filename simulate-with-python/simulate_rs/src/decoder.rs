@@ -4,14 +4,17 @@ use anyhow::Result;
 use fastcmp::Compare;
 use g2p::GaloisField;
 use ndarray::Array1;
+use num::{FromPrimitive, Integer, NumCast, Signed, ToPrimitive};
 use numpy::ndarray::{ArrayView1, ArrayView2};
 use ordered_float::NotNan;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    convert::TryInto,
+    convert::{TryFrom, TryInto},
     env::VarError,
+    marker::PhantomData,
     mem::{self, transmute, MaybeUninit},
+    ops::Add,
 };
 
 macro_rules! debug_unwrap {
@@ -34,7 +37,7 @@ struct VariableNode<const DC: usize, const Q: usize> {
     /// options to deal with irregular codes
     check_idx: [Option<Key1D>; DC],
     /// The a-priory channel value
-    channel: Option<Message<Q>>,
+    channel: Option<QaryLlrs<Q>>,
 }
 
 impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
@@ -82,7 +85,7 @@ impl<const DV: usize> CheckNode<DV> {
 pub type FloatType = f32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Message<const Q: usize>([FloatType; Q]);
+pub struct QaryLlrs<const Q: usize>([FloatType; Q]);
 
 // Returns the arguments ordered by value
 fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
@@ -93,7 +96,7 @@ fn min_max<I: PartialOrd>(in1: I, in2: I) -> (I, I) {
     }
 }
 
-impl<const Q: usize> Message<Q> {
+impl<const Q: usize> QaryLlrs<Q> {
     /// Runs a three-way q-ary min-function, which returns the 2 minimum values of itself and two arguments
     fn qary_3min2(&self, incoming1: Self, incoming2: Self) -> (Self, Self) {
         let mut min1 = Self([FloatType::INFINITY; Q]);
@@ -159,8 +162,8 @@ impl<const Q: usize> Message<Q> {
 
 #[derive(Debug, Default, Clone)]
 struct Edge<const Q: usize> {
-    v2c: Option<Message<Q>>,
-    c2v: Option<Message<Q>>,
+    v2c: Option<QaryLlrs<Q>>,
+    c2v: Option<QaryLlrs<Q>>,
 }
 
 type Key1D = u16;
@@ -216,19 +219,32 @@ impl From<(Key1D, Key1D)> for Key2D {
 type Container2D<T> = rustc_hash::FxHashMap<Key2D, T>;
 //type Container2D<T> = HashMap<Key2D, T>;
 
+type ParCheckType = bool;
+
+/// Decoder that implements min_sum algorithm.
+///
+/// The generic arguments are:
+/// N: Number of variable nodes
+/// R: Number of check nodes
+/// DV: Maximum variable node degree (num checks, per variable)
+/// DC: Maximum check node degree (num variables, per check)
+/// Q: Q-ary, that is number Q sub messages in the tanner graph, per edge
+/// B: value mapping [-B, ..., 0, ..., B] where Q == 2B+1
 pub struct Decoder<
     const N: usize,
     const R: usize,
     const DV: usize,
     const DC: usize,
     const Q: usize,
-    GF: GaloisField,
+    const B: usize,
+    BType: Integer + Signed,
 > {
-    parity_check: Container2D<GF>,
+    parity_check: Container2D<ParCheckType>,
     edges: Container2D<Edge<Q>>,
     vn: [VariableNode<DC, Q>; N],
     cn: [CheckNode<DV>; R],
     max_iter: u32,
+    _btype: PhantomData<BType>,
 }
 
 fn make_default_array<T: Default, const E: usize>() -> [T; E] {
@@ -272,21 +288,31 @@ impl<
         const DV: usize,
         const DC: usize,
         const Q: usize,
-        GF: GaloisField,
-    > Decoder<N, R, DV, DC, Q, GF>
+        const B: usize,
+        BType: Integer + Signed + NumCast + Copy + FromPrimitive,
+    > Decoder<N, R, DV, DC, Q, B, BType>
 {
     const N: usize = N;
     const R: usize = R;
     const DV: usize = DV;
     const DC: usize = DC;
     const Q: usize = Q;
+    const B: usize = B;
 
-    pub fn new(parity_check: [[GF; N]; R], max_iter: u32) -> Self {
+    pub fn new(parity_check: [[ParCheckType; N]; R], max_iter: u32) -> Self {
+        if B * 2 + 1 > Q {
+            let b = B as i32;
+            let bb: Vec<i32> = (-b..=b).collect();
+            panic!(
+                "Cannot instantiate decoder with Q={} sub-messages and provided mapping {:?}",
+                Q, bb
+            );
+        }
         let vn: RefCell<[VariableNode<DC, Q>; N]> = RefCell::new(make_default_array());
         let cn: RefCell<[CheckNode<DV>; R]> = RefCell::new(make_default_array());
         let edges = RefCell::new(Container2D::default());
 
-        let parity_check: Container2D<GF> = IntoIterator::into_iter(parity_check)
+        let parity_check: Container2D<ParCheckType> = IntoIterator::into_iter(parity_check)
             .enumerate()
             .flat_map(|(row_num, row)| {
                 let vn = &vn;
@@ -295,7 +321,7 @@ impl<
                 IntoIterator::into_iter(row)
                     .enumerate()
                     // Filter out zeroes in the parity check
-                    .filter(|(col_num, h)| h.ne(&GF::ZERO))
+                    .filter(|(col_num, h)| *h)
                     // Handle the non-zeroes
                     .map(move |(col_num, h)| {
                         let ij: Key2D = (row_num, col_num).into();
@@ -330,6 +356,7 @@ impl<
             cn,
             edges,
             max_iter,
+            _btype: PhantomData,
         }
     }
 
@@ -338,18 +365,17 @@ impl<
     /// # Safety
     ///
     /// This function is safe to use if it does not panic in debug builds!
-    pub fn min_sum(&self, channel_llr: [Message<Q>; N]) -> Result<[GF; N]> {
+    pub fn min_sum(&self, channel_llr: [QaryLlrs<Q>; N]) -> Result<[BType; N]> {
         // Clone the states that we need to mutate
         let mut vn = self.vn.clone();
         let mut edges = self.edges.clone();
-        let mut hard_decision = [GF::ZERO; N];
+        let mut hard_decision = [BType::zero(); N];
 
         // 0. Initialize the channel values
         for (var_idx, (v, m)) in (0..).zip(vn.iter_mut().zip(channel_llr)) {
             v.channel = Some(m);
             for key in v.checks(var_idx) {
                 // We assume that only ones are present in the parity check matrix
-                assert!(self.parity_check.get(&key).unwrap() == &GF::ONE);
                 debug_unwrap!(edges.get_mut(&key)).v2c.insert(m);
             }
         }
@@ -363,8 +389,8 @@ impl<
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
             for (check_idx, check) in (0..).zip(&self.cn) {
-                let mut min1 = Message([FloatType::INFINITY; Q]);
-                let mut min2 = Message([FloatType::INFINITY; Q]);
+                let mut min1 = QaryLlrs([FloatType::INFINITY; Q]);
+                let mut min2 = QaryLlrs([FloatType::INFINITY; Q]);
 
                 // 3.1 Find min1 and min2 values
                 for key in check.variables(check_idx) {
@@ -388,7 +414,7 @@ impl<
                 // Collect connected checks
 
                 // 4.1 primitive messages. Full summation
-                let mut sum: Message<Q> = debug_unwrap!(var.channel);
+                let mut sum: QaryLlrs<Q> = debug_unwrap!(var.channel);
                 for key in var.checks(var_idx) {
                     let incoming = debug_unwrap!(debug_unwrap!(edges.get(&key)).c2v);
                     sum = sum.qary_add(incoming)
@@ -399,14 +425,14 @@ impl<
                     let incoming = debug_unwrap!(edge.c2v);
                     let prim_out = sum.qary_sub(incoming);
                     // 5. Message normalization
-                    let arg_min = arg_min(prim_out);
+                    let arg_min = Self::arg_min(prim_out);
                     let out = prim_out.qary_sub_arg(arg_min);
                     edge.v2c.replace(out);
                 }
 
                 if it >= self.max_iter {
                     // 6. Tentative decision
-                    hard_decision[var_idx as usize] = arg_min_gf(sum);
+                    hard_decision[var_idx as usize] = Self::i2b(Self::arg_min(sum));
                 }
             }
 
@@ -418,9 +444,9 @@ impl<
         Ok(hard_decision)
     }
 
-    pub fn into_llr(channel_output: &[[FloatType; Q]; N]) -> [Message<Q>; N] {
+    pub fn into_llr(channel_output: &[[FloatType; Q]; N]) -> [QaryLlrs<Q>; N] {
         const EPSILON: FloatType = 0.001;
-        let mut llrs = [Message::<Q>([0.0; Q]); N];
+        let mut llrs = [QaryLlrs::<Q>([0.0; Q]); N];
         for (var, msg) in channel_output.iter().zip(llrs.iter_mut()) {
             let sum: FloatType = var.iter().sum();
             let max = var
@@ -443,32 +469,43 @@ impl<
 
         llrs
     }
+
+    fn arg_min(m: QaryLlrs<Q>) -> usize {
+        let mut min_val = FloatType::INFINITY;
+        let mut min_arg = 0;
+        for (arg, val) in m.0.iter().copied().enumerate() {
+            if val < min_val {
+                min_val = val;
+                min_arg = arg;
+            }
+        }
+        min_arg
+    }
+
+    pub fn i2b<T: ToPrimitive>(i: T) -> BType {
+        let lower = BType::from(-(B as i32)).unwrap();
+        lower + BType::from(i).unwrap()
+    }
+
+    pub fn b2i<T>(val: BType) -> T
+    where
+        BType: TryInto<T> + std::fmt::Debug,
+        T: Add<Output = T> + TryFrom<usize> + std::fmt::Debug,
+    {
+        let mut val: T = into_or_panic(val);
+
+        val + into_or_panic(B)
+    }
 }
 
-fn arg_min<const Q: usize>(m: Message<Q>) -> usize {
-    let mut min_val = FloatType::INFINITY;
-    let mut min_arg = 0;
-    for (arg, val) in m.0.iter().copied().enumerate() {
-        if val < min_val {
-            min_val = val;
-            min_arg = arg;
-        }
+fn into_or_panic<T, U>(from: T) -> U
+where
+    T: TryInto<U>,
+{
+    match from.try_into() {
+        Ok(val) => val,
+        Err(_) => panic!("Failed conversion!"),
     }
-    min_arg
-}
-
-fn arg_min_gf<const Q: usize, GF: GaloisField>(m: Message<Q>) -> GF {
-    let mut min_val = FloatType::INFINITY;
-    let mut min_arg = GF::ZERO;
-    let mut arg = GF::ZERO;
-    for val in m.0.iter().copied() {
-        if val < min_val {
-            min_val = val;
-            min_arg = arg;
-        }
-        arg += GF::ONE;
-    }
-    min_arg
 }
 
 #[cfg(test)]
@@ -477,15 +514,15 @@ mod tests {
 
     g2p::g2p!(GF16, 4, modulus: 0b10011);
 
-    type MyTinyTestDecoder = Decoder<6, 3, 4, 3, { GF16::SIZE }, GF16>;
+    type MyTinyTestDecoder = Decoder<6, 3, 4, 3, 15, 7, i8>;
 
     #[test]
     fn into_llr() {
         let channel_output = [[
-            0.0, 0.0, 0.0, 0.0, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.02, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.02, 0.0, 0.0, 0.0,
         ]; MyTinyTestDecoder::N];
         let llr = MyTinyTestDecoder::into_llr(&channel_output);
-        let expected = [Message([
+        let expected = [QaryLlrs([
             FloatType::INFINITY,
             FloatType::INFINITY,
             FloatType::INFINITY,
@@ -502,7 +539,6 @@ mod tests {
             FloatType::INFINITY,
             FloatType::INFINITY,
             FloatType::INFINITY,
-            FloatType::INFINITY,
         ]); MyTinyTestDecoder::N];
         assert_eq!(expected, llr);
     }
@@ -511,9 +547,9 @@ mod tests {
     fn it_works() {
         let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new(
             [
-                [1.into(), 1.into(), 1.into(), 1.into(), 0.into(), 0.into()],
-                [0.into(), 0.into(), 1.into(), 1.into(), 0.into(), 1.into()],
-                [1.into(), 0.into(), 0.into(), 1.into(), 1.into(), 0.into()],
+                [true, true, true, true, false, false],
+                [false, false, true, true, false, true],
+                [true, false, false, true, true, false],
             ],
             10,
         );
@@ -521,19 +557,19 @@ mod tests {
         // Zero message with zero noise
         let mut channel_output = [[0.0; MyTinyTestDecoder::Q]; MyTinyTestDecoder::N];
         for el in &mut channel_output {
-            el[0] = 1.0;
+            el[MyTinyTestDecoder::b2i::<usize>(0)] = 1.0;
         }
 
         // Introduce an error
-        channel_output[1][0] = 0.1;
-        channel_output[1][15] = 0.9;
+        channel_output[1][MyTinyTestDecoder::b2i::<usize>(0)] = 0.1;
+        channel_output[1][MyTinyTestDecoder::b2i::<usize>(7)] = 0.9;
 
         // Convert to LLR
         let channel_llr = MyTinyTestDecoder::into_llr(&channel_output);
 
         let res = decoder_6_3_4_3_gf16.min_sum(channel_llr).expect("Failed");
 
-        let expected: [GF16; 6] = [0.into(); 6];
+        let expected: [i8; 6] = [0; 6];
 
         assert_eq!(res, expected);
     }

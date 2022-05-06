@@ -44,14 +44,14 @@ fn decoder_benchmark(c: &mut Criterion) {
     let decoder = MyTestDecoder::new(parity_check, 10);
 
     // Zero message with zero noise
-    let mut channel_output = [[0.0; Q]; N];
+    let mut channel_output = [[0.0; MyTestDecoder::Q]; MyTestDecoder::N];
     for el in &mut channel_output {
-        el[0] = 1.0;
+        el[MyTestDecoder::b2i::<usize>(0)] = 1.0;
     }
 
     // Introduce an error
-    channel_output[1][0] = 0.1;
-    channel_output[1][15] = 0.9;
+    channel_output[1][MyTestDecoder::b2i::<usize>(0)] = 0.1;
+    channel_output[1][MyTestDecoder::b2i::<usize>(7)] = 0.9;
 
     // Convert to LLR
     let channel_llr = MyTestDecoder::into_llr(&channel_output);

@@ -292,12 +292,12 @@ impl<
         BType: Integer + Signed + NumCast + Copy + FromPrimitive,
     > Decoder<N, R, DV, DC, Q, B, BType>
 {
-    const N: usize = N;
-    const R: usize = R;
-    const DV: usize = DV;
-    const DC: usize = DC;
-    const Q: usize = Q;
-    const B: usize = B;
+    pub const N: usize = N;
+    pub const R: usize = R;
+    pub const DV: usize = DV;
+    pub const DC: usize = DC;
+    pub const Q: usize = Q;
+    pub const B: usize = B;
 
     pub fn new(parity_check: [[ParCheckType; N]; R], max_iter: u32) -> Self {
         if B * 2 + 1 > Q {

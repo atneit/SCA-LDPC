@@ -4,17 +4,18 @@ use anyhow::Result;
 use fastcmp::Compare;
 use g2p::GaloisField;
 use ndarray::Array1;
-use num::{FromPrimitive, Integer, NumCast, Signed, ToPrimitive};
+use num::{Float, FromPrimitive, Integer, NumCast, Signed, ToPrimitive};
 use numpy::ndarray::{ArrayView1, ArrayView2};
 use ordered_float::NotNan;
 use std::{
     cell::RefCell,
+    cmp::min,
     collections::HashMap,
     convert::{TryFrom, TryInto},
     env::VarError,
     marker::PhantomData,
     mem::{self, transmute, MaybeUninit},
-    ops::Add,
+    ops::{Add, RangeInclusive},
 };
 
 macro_rules! debug_unwrap {
@@ -33,23 +34,23 @@ macro_rules! debug_unwrap {
 // TODO: change Q
 /// A variable node
 #[derive(Debug, Clone)]
-struct VariableNode<const DC: usize, const Q: usize> {
+struct VariableNode<const DV: usize, const Q: usize> {
     /// options to deal with irregular codes
-    check_idx: [Option<Key1D>; DC],
+    check_idx: [Option<Key1D>; DV],
     /// The a-priory channel value
     channel: Option<QaryLlrs<Q>>,
 }
 
-impl<const DC: usize, const Q: usize> Default for VariableNode<DC, Q> {
+impl<const DV: usize, const Q: usize> Default for VariableNode<DV, Q> {
     fn default() -> Self {
         Self {
-            check_idx: [None; DC],
+            check_idx: [None; DV],
             channel: Default::default(),
         }
     }
 }
 
-impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
+impl<const DV: usize, const Q: usize> VariableNode<DV, Q> {
     fn checks(&self, var_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.check_idx
             .iter()
@@ -60,20 +61,20 @@ impl<const DC: usize, const Q: usize> VariableNode<DC, Q> {
 
 /// A check node
 #[derive(Debug)]
-struct CheckNode<const DV: usize> {
+struct CheckNode<const DC: usize> {
     /// options to deal with initialization and irregular codes
-    variable_idx: [Option<Key1D>; DV],
+    variable_idx: [Option<Key1D>; DC],
 }
 
-impl<const DV: usize> Default for CheckNode<DV> {
+impl<const DC: usize> Default for CheckNode<DC> {
     fn default() -> Self {
         Self {
-            variable_idx: [None; DV],
+            variable_idx: [None; DC],
         }
     }
 }
 
-impl<const DV: usize> CheckNode<DV> {
+impl<const DC: usize> CheckNode<DC> {
     fn variables(&self, check_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.variable_idx
             .iter()
@@ -216,6 +217,23 @@ impl From<(Key1D, Key1D)> for Key2D {
     }
 }
 
+#[derive(Debug)]
+struct Configuration<const DC: usize, BType> {
+    sum: FloatType,
+    d_values: [BType; DC],
+    alpha_i: [FloatType; DC],
+}
+
+impl<const DC: usize, BType: Default + Copy> Default for Configuration<DC, BType> {
+    fn default() -> Self {
+        Self {
+            sum: Default::default(),
+            d_values: [BType::default(); DC],
+            alpha_i: [0.0; DC],
+        }
+    }
+}
+
 type Container2D<T> = rustc_hash::FxHashMap<Key2D, T>;
 //type Container2D<T> = HashMap<Key2D, T>;
 
@@ -226,25 +244,31 @@ type ParCheckType = bool;
 /// The generic arguments are:
 /// N: Number of variable nodes
 /// R: Number of check nodes
-/// DV: Maximum variable node degree (num checks, per variable)
 /// DC: Maximum check node degree (num variables, per check)
+/// DV: Maximum variable node degree (num checks, per variable)
 /// Q: Q-ary, that is number Q sub messages in the tanner graph, per edge
 /// B: value mapping [-B, ..., 0, ..., B] where Q == 2B+1
 pub struct Decoder<
     const N: usize,
     const R: usize,
-    const DV: usize,
     const DC: usize,
+    const DV: usize,
     const Q: usize,
     const B: usize,
     BType: Integer + Signed,
 > {
+    /// Parity check matrix
     parity_check: Container2D<ParCheckType>,
+    /// Messages between variables and check nodes
     edges: Container2D<Edge<Q>>,
-    vn: [VariableNode<DC, Q>; N],
-    cn: [CheckNode<DV>; R],
+    /// List of Variable nodes
+    vn: [VariableNode<DV, Q>; N],
+    /// List of Check nodes
+    cn: [CheckNode<DC>; R],
+    /// Number of iterations to perform in the decoder    
     max_iter: u32,
-    _btype: PhantomData<BType>,
+    /// The range of valid values [-B, ..., 0, ..., B]
+    brange: RangeInclusive<BType>,
 }
 
 fn make_default_array<T: Default, const E: usize>() -> [T; E] {
@@ -285,19 +309,21 @@ fn insert_first_none<T, const E: usize>(array: &mut [Option<T>; E], value: T) {
 impl<
         const N: usize,
         const R: usize,
-        const DV: usize,
         const DC: usize,
+        const DV: usize,
         const Q: usize,
         const B: usize,
-        BType: Integer + Signed + NumCast + Copy + FromPrimitive,
-    > Decoder<N, R, DV, DC, Q, B, BType>
+        BType,
+    > Decoder<N, R, DC, DV, Q, B, BType>
+where
+    BType: Integer + Signed + NumCast + Copy + FromPrimitive + TryInto<usize> + Default,
 {
     pub const N: usize = N;
     pub const R: usize = R;
-    pub const DV: usize = DV;
     pub const DC: usize = DC;
+    pub const DV: usize = DV;
     pub const Q: usize = Q;
-    pub const B: usize = B;
+    pub const B: isize = B as isize;
 
     pub fn new(parity_check: [[ParCheckType; N]; R], max_iter: u32) -> Self {
         if B * 2 + 1 > Q {
@@ -308,8 +334,8 @@ impl<
                 Q, bb
             );
         }
-        let vn: RefCell<[VariableNode<DC, Q>; N]> = RefCell::new(make_default_array());
-        let cn: RefCell<[CheckNode<DV>; R]> = RefCell::new(make_default_array());
+        let vn: RefCell<[VariableNode<DV, Q>; N]> = RefCell::new(make_default_array());
+        let cn: RefCell<[CheckNode<DC>; R]> = RefCell::new(make_default_array());
         let edges = RefCell::new(Container2D::default());
 
         let parity_check: Container2D<ParCheckType> = IntoIterator::into_iter(parity_check)
@@ -330,13 +356,13 @@ impl<
                         edges.borrow_mut().insert(ij, Default::default());
 
                         // add the check index to the variable
-                        insert_first_none::<_, DC>(
+                        insert_first_none::<_, DV>(
                             &mut vn.borrow_mut()[ij.col()].check_idx,
                             ij.row,
                         );
 
                         // add the variable index to the check
-                        insert_first_none::<_, DV>(
+                        insert_first_none::<_, DC>(
                             &mut cn.borrow_mut()[ij.row()].variable_idx,
                             ij.col,
                         );
@@ -356,7 +382,7 @@ impl<
             cn,
             edges,
             max_iter,
-            _btype: PhantomData,
+            brange: ((BType::from(-Self::B).unwrap())..=(BType::from(Self::B).unwrap())),
         }
     }
 
@@ -381,31 +407,64 @@ impl<
         }
 
         let mut it = 0;
-        loop {
+        // Fill array with -B values
+        let mut d_values = [*self.brange.start(); DC];
+        let mut configurations = Vec::<Configuration<DC, BType>>::new();
+        'decoding: loop {
             it += 1;
             // 1. Parity check: Compute the syndrome based on the hard_decision
             // noop, we use only num iterations instead
             // 2. check num iterations
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
-            for (check_idx, check) in (0..).zip(&self.cn) {
-                let mut min1 = QaryLlrs([FloatType::INFINITY; Q]);
-                let mut min2 = QaryLlrs([FloatType::INFINITY; Q]);
+            'check_update: for (check_idx, check) in (0..).zip(&self.cn) {
+                {
+                    let alpha_i: Vec<&QaryLlrs<Q>> = check
+                        .variables(check_idx)
+                        .map(|key| debug_unwrap!(&edges[&key].v2c.as_ref()))
+                        .collect();
 
-                // 3.1 Find min1 and min2 values
-                for key in check.variables(check_idx) {
-                    //let key = (check_idx, var_idx).into();
-                    (min1, min2) =
-                        debug_unwrap!(debug_unwrap!(edges.get(&key)).v2c).qary_3min2(min1, min2);
+                    let last_idx = alpha_i.len() - 1;
+                    let first_vars = 0..(last_idx);
+                    'find_configurations: loop {
+                        if let Some(dsum) = self.calc_dsum(&alpha_i, first_vars.clone(), &d_values)
+                        {
+                            // This is a valid configuration
+                            // set final d_value to counterweight dsum (to make parity check succeed).
+                            d_values[last_idx] = -dsum;
+                            assert!(self.brange.contains(&d_values[last_idx]));
+                            // Generate configuration
+                            let mut cfg = Configuration::default();
+                            cfg.sum = alpha_i
+                                .iter()
+                                .zip(d_values)
+                                .zip(&mut cfg.alpha_i)
+                                .zip(&mut cfg.d_values)
+                                .map(|(((src_alpha_ij, src_d), dst_alpha_ijd), dst_d)| {
+                                    *dst_alpha_ijd = src_alpha_ij.0[Self::b2i(src_d)];
+                                    *dst_d = src_d;
+                                    *dst_alpha_ijd
+                                })
+                                .sum();
+                            configurations.push(cfg);
+                        }
+                        if self.increment_d_values(&mut d_values[first_vars.clone()]) {
+                            // There are no more configurations to check
+                            // increment_d_values have reset d_values back to [-B, -B, ..., -B]
+                            break 'find_configurations;
+                        }
+                    }
                 }
 
-                // TODO: make single loop
-                // 3.1 Send check messages back to variable node
-                for key in check.variables(check_idx) {
-                    //let key = (check_idx, var_idx).into();
-                    let edge = debug_unwrap!(edges.get_mut(&key));
-                    edge.c2v
-                        .replace(debug_unwrap!(edge.v2c).qary_get_unequal(min1, min2));
+                // Find and send minimum Llrs to variables
+                for (j, key) in check.variables(check_idx).enumerate() {
+                    let mut beta_ij = QaryLlrs::<Q>([FloatType::INFINITY; Q]);
+                    for cfg in &configurations {
+                        let beta_ijd = &mut beta_ij.0[Self::b2i(cfg.d_values[j])];
+                        let cfg_sum = cfg.sum - cfg.alpha_i[j];
+                        *beta_ijd = cfg_sum.min(*beta_ijd);
+                    }
+                    debug_unwrap!(edges.get_mut(&key)).c2v.replace(beta_ij);
                 }
             }
 
@@ -437,11 +496,62 @@ impl<
             }
 
             if it >= self.max_iter {
-                break;
+                break 'decoding;
             }
         }
 
         Ok(hard_decision)
+    }
+
+    fn calc_dsum(
+        &self,
+        alpha_i: &[&QaryLlrs<Q>],
+        first_vars: std::ops::Range<usize>,
+        d_values: &[BType; DC],
+    ) -> Option<BType> {
+        let mut dsum = BType::zero();
+
+        for (var, alpha_ij) in (alpha_i[first_vars]).iter().enumerate() {
+            let d = d_values[var];
+            dsum = dsum + d;
+            if !self.brange.contains(&dsum) {
+                return None;
+            }
+            let alpha_ijd = alpha_ij.0[Self::b2i(d)];
+            if alpha_ijd.is_infinite() {
+                return None;
+            }
+        }
+
+        Some(dsum)
+    }
+
+    /// Increments array of d values ([[-B, ..., 0, ..., B], ..., [-B, ..., 0, ..., B]])
+    /// one element at a time. Return value indicates if we are finished or not.
+    ///
+    /// If input to first call is [-B, ..., -B] then this function
+    /// can be called (2*B+1)*DC times. After the final call the return value will be true
+    /// (nothing left to do) and the values in d_values will be reset to [B, ..., B]
+    fn increment_d_values(&self, d_values: &mut [BType]) -> bool {
+        // increment current or next index
+        let mut retval = true;
+        let mut backfill = None;
+        for (i, d) in d_values.iter_mut().enumerate() {
+            let d1 = *d + BType::one();
+            if self.brange.contains(&d1) {
+                *d = d1; // Set output
+                retval = false;
+                break;
+            }
+            // Backfill array
+            backfill = Some(i);
+        }
+        if let Some(backfill) = backfill {
+            d_values[0..=backfill].fill(*self.brange.start());
+        }
+
+        // Nothing left to increment
+        retval
     }
 
     pub fn into_llr(channel_output: &[[FloatType; Q]; N]) -> [QaryLlrs<Q>; N] {
@@ -482,19 +592,23 @@ impl<
         min_arg
     }
 
-    pub fn i2b<T: ToPrimitive>(i: T) -> BType {
-        let lower = BType::from(-(B as i32)).unwrap();
-        lower + BType::from(i).unwrap()
+    pub fn i2b(i: usize) -> BType {
+        let i: isize = i.try_into().unwrap();
+        let b: isize = B.try_into().unwrap();
+        let val = i - b;
+        if val > b || val < -b {
+            panic!("Value over-/underflow!");
+        }
+        BType::from(val).unwrap()
     }
 
-    pub fn b2i<T>(val: BType) -> T
+    pub fn b2i(val: BType) -> usize
     where
-        BType: TryInto<T> + std::fmt::Debug,
-        T: Add<Output = T> + TryFrom<usize> + std::fmt::Debug,
+        BType: TryInto<usize>,
     {
-        let mut val: T = into_or_panic(val);
+        let mut val: isize = val.to_isize().unwrap();
 
-        val + into_or_panic(B)
+        (val + (B as isize)) as usize
     }
 }
 
@@ -515,6 +629,121 @@ mod tests {
     g2p::g2p!(GF16, 4, modulus: 0b10011);
 
     type MyTinyTestDecoder = Decoder<6, 3, 4, 3, 15, 7, i8>;
+
+    #[test]
+    fn increment_d_values() {
+        let decoder = Decoder::<0, 0, 3, 0, 3, 1, i8>::new([], 0);
+
+        let mut d_values = [-1, -1, -1];
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, -1, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, -1, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 0, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 0, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 0, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 1, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 1, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 1, -1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, -1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, -1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, -1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 0, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 0, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 0, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 1, 0]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, -1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, -1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, -1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 0, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 0, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 0, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [-1, 1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [0, 1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(!finished);
+        assert_eq!(d_values, [1, 1, 1]);
+
+        let finished = decoder.increment_d_values(&mut d_values);
+        assert!(finished);
+        assert_eq!(d_values, [-1, -1, -1]);
+    }
 
     #[test]
     fn into_llr() {
@@ -557,12 +786,12 @@ mod tests {
         // Zero message with zero noise
         let mut channel_output = [[0.0; MyTinyTestDecoder::Q]; MyTinyTestDecoder::N];
         for el in &mut channel_output {
-            el[MyTinyTestDecoder::b2i::<usize>(0)] = 1.0;
+            el[MyTinyTestDecoder::b2i(0)] = 1.0;
         }
 
         // Introduce an error
-        channel_output[1][MyTinyTestDecoder::b2i::<usize>(0)] = 0.1;
-        channel_output[1][MyTinyTestDecoder::b2i::<usize>(7)] = 0.9;
+        channel_output[1][MyTinyTestDecoder::b2i(0)] = 0.1;
+        channel_output[1][MyTinyTestDecoder::b2i(7)] = 0.9;
 
         // Convert to LLR
         let channel_llr = MyTinyTestDecoder::into_llr(&channel_output);

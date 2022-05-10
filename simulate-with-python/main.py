@@ -8,8 +8,11 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 # Activate logger
-import logging
-from logzero import logger
+import logging, coloredlogs
+
+coloredlogs.install(level="DEBUG")
+logger = logging.getLogger(__name__.replace("__", ""))
+
 
 logger.debug("Importing dependencies...")
 
@@ -21,7 +24,12 @@ from simulate.make_code import (
     make_regular_ldpc_parity_check_matrix_identity,
 )
 from simulate.utils import CommandsBase, make_random_state
-from simulate.decode import simulate_frame_error_rate, ErrorsProvider
+from simulate.decode import (
+    simulate_frame_error_rate,
+    simulate_frame_error_rate_rust,
+    ErrorsProvider,
+)
+from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
 import argparse
@@ -67,6 +75,35 @@ class Commands(CommandsBase):
             type=str,
             help="Input file specifying distribution of the error for different positions.",
         )
+        error_group.add_argument(
+            "--threads",
+            action="store",
+            type=int,
+            help="Number of threads to run decoders on",
+            default=4,
+        )
+
+    def command_test_rust_package(self, args: argparse.Namespace):
+        logger.info(
+            "Testing a regular (3,6+1) ldpc code with a parity check matrix of the form: H_r*k|I_r*r"
+        )
+        rng = make_random_state(args.seed)
+        runs = args.runs
+        error_rate = args.error_rate
+        threads = args.threads
+        k = 300  # 17669
+        r = 150  #
+        rate = k / (k + r)
+        row_weight = 6
+        column_weight = 3
+        # n = k + r
+        H = make_regular_ldpc_parity_check_matrix_identity(
+            k, r, column_weight, row_weight, rng
+        )
+        logger.info(f"Constructed a rate {rate} code")
+
+        successes = simulate_frame_error_rate_rust(H, error_rate, runs, rng, threads)
+        logger.info(f"Success ratio {successes}/{runs}={successes/runs}")
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(

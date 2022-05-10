@@ -1,7 +1,10 @@
+from concurrent.futures import as_completed
 import numpy as np
 from ldpc import bp_decoder
-from logzero import logger
+import logging
 import itertools
+
+logger = logging.getLogger(__name__)
 
 
 class ErrorsProvider:
@@ -20,16 +23,17 @@ class ErrorsProvider:
         self.error_distribution = None
         self.rng = rng
         import re
+
         if error_file is not None:
             error_distribution = []
-            with open(error_file, 'rt') as f:
+            with open(error_file, "rt") as f:
                 for line in f:
                     line = line.strip()
-                    pr = re.split('[, ]+', line)
+                    pr = re.split("[, ]+", line)
                     pr = list(float(x) for x in pr)
                     error_distribution.append(pr)
             self.error_distribution = error_distribution
-    
+
     def __get_binary_error(self, threshold):
         if self.rng.rand() < threshold:
             return 1
@@ -107,9 +111,9 @@ class ErrorsProvider:
     def get_binary_channel_probs(self, n=None):
         """
         Get error distribution for each position. If parameter n is not provided,
-        function return array of distributions from the file. If n is present, function 
+        function return array of distributions from the file. If n is present, function
         return array of length n, where array is obtained by concatenating distribution
-        array from the file with itself until length n is reached 
+        array from the file with itself until length n is reached
         """
         if self.error_distribution is None:
             return [None]
@@ -124,9 +128,11 @@ class ErrorsProvider:
         return pr
 
 
-
 def simulate_frame_error_rate(
-    H: np.ndarray, errors_provider: ErrorsProvider, runs: int, rng: np.random.RandomState
+    H: np.ndarray,
+    errors_provider: ErrorsProvider,
+    runs: int,
+    rng: np.random.RandomState,
 ):
     """
     Simulates the frame error rate (FER) of the provided code.
@@ -147,7 +153,13 @@ def simulate_frame_error_rate(
     # BP decoder class. Make sure this is defined outside the loop
     error_rate = errors_provider.get_error_rate()
     channel_probs = errors_provider.get_binary_channel_probs(n)
-    bpd = bp_decoder(H, error_rate=error_rate, max_iter=n, bp_method="product_sum", channel_probs=channel_probs)
+    bpd = bp_decoder(
+        H,
+        error_rate=error_rate,
+        max_iter=n,
+        bp_method="product_sum",
+        channel_probs=channel_probs,
+    )
     error = np.zeros(n).astype(int)  # error vector
 
     successes = 0
@@ -165,3 +177,79 @@ def simulate_frame_error_rate(
 
     return successes
 
+
+def simulate_frame_error_rate_rust(
+    H: np.ndarray,
+    error_rate: float,
+    runs: int,
+    rng: np.random.RandomState,
+    threads: int,
+):
+    """
+    This function simulates an all-zero codeword with some noisy symbols
+    """
+    from simulate_rs import DecoderN450R150V7C3GF16
+    from concurrent.futures import (
+        ThreadPoolExecutor,
+        as_completed,
+    )
+
+    n = H.shape[1]
+    q = 16
+    channel_output = np.zeros((n, q)).astype(np.float32)  # error vector
+
+    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"), 5)
+
+    p_linear = 1 / q
+    channel_prob = [p_linear for x in range(0, q)]
+    good_variable = np.array(channel_prob)
+    bad_variable = np.array(channel_prob)
+    good_variable[[0, 1]] = np.array([2 * p_linear, 0])
+    bad_variable[[-1, -2]] = np.array([2 * p_linear, 0])
+
+    logger.debug(f"Good variable: \n{good_variable}")
+    logger.debug(f"Bad variable: \n{bad_variable}")
+
+    logger.info(
+        f"Starting {runs} decoding calls with random noise, using {threads} threads..."
+    )
+
+    with ThreadPoolExecutor(threads) as executor:
+        run = 0
+        decoding_map = {}
+        while run < runs:
+            errs = 0
+            for i in range(n):
+                if rng.rand() < error_rate:
+                    channel_output[i, :] = bad_variable
+                    errs += 1
+                else:
+                    channel_output[i, :] = good_variable
+            if not errs:
+                continue
+            logger.debug("Number of bad symbols")
+            logger.debug(f"Channel output: \n{channel_output}")
+            decoding_map[executor.submit(decoder.min_sum, channel_output.copy())] = errs
+            run += 1
+
+        successes = 0
+        max_errs_success = 0
+        min_errs_fail = None
+        for future in as_completed(decoding_map):
+            errs = decoding_map[future]
+            decoding = future.result()
+            logger.debug(f"Decoding: \n{decoding}")
+            if decoding == [0] * n:
+                max_errs_success = max(errs, max_errs_success)
+                successes += 1
+            else:
+                min_errs_fail = min(errs, min_errs_fail) if min_errs_fail else errs
+
+    logger.info(
+        f"Highest number of noisy symbols corrected, per frame: {max_errs_success}"
+    )
+    logger.info(
+        f"Lowest number of noisy symbols that failed correction: {min_errs_fail}"
+    )
+
+    return successes

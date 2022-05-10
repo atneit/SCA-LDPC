@@ -1,18 +1,43 @@
 {
     "cSpell.words": [
+        "ary'ily",
         "astype",
+        "bneg",
+        "brange",
+        "btype",
         "circulant",
         "cmds",
         "curr",
+        "dsum",
         "dtype",
+        "fastcmp",
         "LDPC",
+        "llrs",
+        "mtrand",
         "ndarray",
+        "numpy",
+        "parallelizable",
+        "probs",
+        "pyarray",
+        "pyclass",
+        "pyfunction",
+        "pymethods",
+        "pymodule",
+        "qary",
         "Qian",
+        "Quary",
         "rownum",
-        "scipy"
+        "rustc",
+        "scipy",
+        "submessages",
+        "Uninit",
+        "virtualenv"
     ],
     "python.formatting.provider": "black",
     "editor.formatOnSave": true,
     "editor.formatOnType": true,
-    "editor.formatOnPaste": true
+    "editor.formatOnPaste": true,
+    "rust-analyzer.server.extraEnv": {
+        "CARGO_TARGET_DIR": "target/ra"
+    }
 }

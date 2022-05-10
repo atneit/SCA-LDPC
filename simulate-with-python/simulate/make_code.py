@@ -2,7 +2,9 @@ import sys
 import numpy as np
 from scipy.linalg import circulant
 from . import utils
-from logzero import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def fixed_weight_vec(size, samplings: int, rng):
@@ -37,9 +39,9 @@ def flatten_matrix_parts(parts: np.ndarray):
            [0, 1, 1, 1, 0, 0],
            [1, 0, 1, 0, 1, 0]])
     """
-    with np.printoptions(threshold=sys.maxsize):
-        for part in parts:
-            logger.debug("part: \n" + str(part))
+    # with np.printoptions(threshold=sys.maxsize):
+    # for part in parts:
+    # logger.debug("part: \n" + str(part))
     return np.concatenate(parts, axis=1)
 
 
@@ -110,31 +112,31 @@ def make_regular_ldpc_parity_check_matrix(
             """r must follow (k * column_weight) // row_weight for the parity check matrix to be regular"""
         )
 
-    with np.printoptions(threshold=sys.maxsize):
+    # with np.printoptions(threshold=sys.maxsize):
 
-        H0_n = k
+    H0_n = k
 
-        block = np.zeros((r // column_weight, H0_n), dtype=int)
-        logger.debug("block shape: \n" + str(block))
-        H0 = np.zeros((r, H0_n))
-        block_size = r // column_weight
-        logger.debug("block_size: \n" + str(block_size))
+    block = np.zeros((r // column_weight, H0_n), dtype=int)
+    # logger.debug("block shape: \n" + str(block))
+    H0 = np.zeros((r, H0_n))
+    block_size = r // column_weight
+    # logger.debug("block_size: \n" + str(block_size))
 
-        # Filling the first block with consecutive ones in each row of the block
-        for i in range(block_size):
-            for j in range(i * row_weight, (i + 1) * row_weight):
-                block[i, j] = 1
-        logger.debug("block 0: \n" + str(block))
-        H0[:block_size] = block
+    # Filling the first block with consecutive ones in each row of the block
+    for i in range(block_size):
+        for j in range(i * row_weight, (i + 1) * row_weight):
+            block[i, j] = 1
+    # logger.debug("block 0: \n" + str(block))
+    H0[:block_size] = block
 
-        # create remaining blocks by permutations of the first block's columns:
-        for i in range(1, column_weight):
-            block_i = rng.permutation(block.T).T
-            logger.debug(f"block {i}: \n" + str(block_i))
-            H0[i * block_size : (i + 1) * block_size] = block_i
-        H0 = H0.astype(int)
+    # create remaining blocks by permutations of the first block's columns:
+    for i in range(1, column_weight):
+        block_i = rng.permutation(block.T).T
+        # logger.debug(f"block {i}: \n" + str(block_i))
+        H0[i * block_size : (i + 1) * block_size] = block_i
+    H0 = H0.astype(int)
 
-        return H0
+    return H0
 
 
 def make_regular_ldpc_parity_check_matrix_identity(

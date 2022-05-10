@@ -12,18 +12,26 @@ cache:
   paths:
     - .cache/pip
     - python-virtualenv/
+    - target/
 
-before_script:
-  - python3 --version # For debugging
-  - pip3 install virtualenv
-  - pushd simulate-with-python
-  - source setup-environment.sh
-  - popd
-
-test python package:
+rust:test:
   stage: test
   script:
-    - python simulate-with-python/main.py test_xml
+    - cargo install cargo2junit
+    - cargo test --target-dir target/test --
+      -Z unstable-options --format json --report-time |
+      cargo2junit > report.xml # Generate test report
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+python:test:
+  stage: test
+  script:
+    - python3 --version # For debugging
+    - source simulate-with-python/setup-environment.sh # Also builds rust package
+    - python simulate-with-python/main.py test_xml # Generate test report
   artifacts:
     when: always
     reports:

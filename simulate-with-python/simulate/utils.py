@@ -4,10 +4,11 @@ Module utils
 
 import argparse
 import sys
-import logzero
-from logzero import logger
+import coloredlogs, logging
 import numpy as np
 import numbers
+
+logger = logging.getLogger(__name__)
 
 
 def make_random_state(seed) -> np.random.RandomState:
@@ -80,7 +81,8 @@ class CommandsBase:
         parsed = self._parser.parse_args(args)
         if not parsed.verbose:
             logger.debug("Turning off debug messages from this point onward")
-            logzero.loglevel(logzero.INFO)
+            coloredlogs.install(level="INFO")
+
         return parsed
 
     def run(self, args: argparse.Namespace):

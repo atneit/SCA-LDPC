@@ -351,7 +351,7 @@ where
         // return reference to the current d_values
         match &self.d_values {
             Some(ref d_values) => Some(&d_values[0..self.len]),
-            None => todo!(),
+            None => None,
         }
     }
 }

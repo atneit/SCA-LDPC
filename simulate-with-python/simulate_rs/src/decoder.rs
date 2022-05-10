@@ -234,7 +234,7 @@ impl<const DC: usize, BType: Default + Copy> Default for Configuration<DC, BType
     }
 }
 
-struct ConfigurationIterator<const DC: usize, const Q: usize, BType> {
+struct FiniteDValueIterator<const DC: usize, const Q: usize, BType> {
     finite_d_values: [[BType; Q]; DC],
     num: [usize; DC],
     len: usize,
@@ -242,10 +242,35 @@ struct ConfigurationIterator<const DC: usize, const Q: usize, BType> {
     d_values: Option<[BType; DC]>,
 }
 
-impl<const DC: usize, const Q: usize, BType> ConfigurationIterator<DC, Q, BType>
+impl<const DC: usize, const Q: usize, BType> FiniteDValueIterator<DC, Q, BType>
 where
     BType: Copy + Integer + Signed + AddAssign,
 {
+    fn new<F: Fn(usize) -> BType>(
+        alpha_i: &[&QaryLlrs<Q>],
+        i2b: F,
+    ) -> FiniteDValueIterator<DC, Q, BType> {
+        let mut cfg_iter = FiniteDValueIterator {
+            finite_d_values: [[BType::zero(); Q]; DC],
+            num: [0; DC],
+            len: 0,
+            indices: None,
+            d_values: None,
+        };
+
+        for (j, alpha_ij) in alpha_i.iter().enumerate() {
+            for (d, alpha_ijd) in alpha_ij.0.iter().enumerate() {
+                if alpha_ijd.is_finite() {
+                    cfg_iter.finite_d_values[j][cfg_iter.num[j]] = i2b(d);
+                    cfg_iter.num[j] += 1;
+                }
+            }
+            cfg_iter.len += 1;
+        }
+
+        cfg_iter
+    }
+
     /// Updates d_values according to indices.
     /// Returns whether or not the configuration is valid (summation of b_values = 0)
     fn update_d_values(&mut self) -> bool {
@@ -521,7 +546,8 @@ where
                         .collect();
 
                     //println!("it: {}, check_idx: {}", it, check_idx);
-                    let mut finite_d_values = Self::make_finite_d_values_iterator(&alpha_i);
+                    let mut finite_d_values =
+                        FiniteDValueIterator::<DC, Q, BType>::new(&alpha_i, Self::i2b);
                     while let Some(d_values) = finite_d_values.next() {
                         // This is a valid configuration where the final d_value is set
                         // to counterweight dsum (to make parity check succeed).
@@ -695,30 +721,6 @@ where
         let mut val: isize = val.to_isize().unwrap();
 
         (val + (B as isize)) as usize
-    }
-
-    fn make_finite_d_values_iterator(
-        alpha_i: &[&QaryLlrs<Q>],
-    ) -> ConfigurationIterator<DC, Q, BType> {
-        let mut cfg_iter = ConfigurationIterator {
-            finite_d_values: [[BType::zero(); Q]; DC],
-            num: [0; DC],
-            len: 0,
-            indices: None,
-            d_values: None,
-        };
-
-        for (j, alpha_ij) in alpha_i.iter().enumerate() {
-            for (d, alpha_ijd) in alpha_ij.0.iter().enumerate() {
-                if alpha_ijd.is_finite() {
-                    cfg_iter.finite_d_values[j][cfg_iter.num[j]] = Self::i2b(d);
-                    cfg_iter.num[j] += 1;
-                }
-            }
-            cfg_iter.len += 1;
-        }
-
-        cfg_iter
     }
 }
 

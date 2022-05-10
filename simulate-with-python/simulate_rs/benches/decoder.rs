@@ -35,7 +35,7 @@ where
     Ok(ret)
 }
 
-fn decoder_benchmark(c: &mut Criterion) {
+fn medium_decoder_benchmark(c: &mut Criterion) {
     let parity_check = h_from_file("benches/parity_check_150_450.txt")
         .or_else(|_err| {
             h_from_file("simulate-with-python/simulate_rs/benches/parity_check_150_450.txt")
@@ -56,10 +56,40 @@ fn decoder_benchmark(c: &mut Criterion) {
     // Convert to LLR
     let channel_llr = MyTestDecoder::into_llr(&channel_output);
 
-    c.bench_function("small decoder", |b| {
+    c.bench_function("medium decoder", |b| {
         b.iter(|| decoder.min_sum(black_box(channel_llr)))
     });
 }
 
-criterion_group!(benches, decoder_benchmark);
+type MyTinyTestDecoder = Decoder<6, 3, 4, 3, 15, 7, i8>;
+
+fn small_decoder_benchmark(c: &mut Criterion) {
+    let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new(
+        [
+            [true, true, true, true, false, false],
+            [false, false, true, true, false, true],
+            [true, false, false, true, true, false],
+        ],
+        10,
+    );
+
+    // Zero message with zero noise
+    let mut channel_output = [[0.0; MyTinyTestDecoder::Q]; MyTinyTestDecoder::N];
+    for el in &mut channel_output {
+        el[MyTinyTestDecoder::b2i(0)] = 1.0;
+    }
+
+    // Introduce an error
+    channel_output[1][MyTinyTestDecoder::b2i(0)] = 0.1;
+    channel_output[1][MyTinyTestDecoder::b2i(7)] = 0.9;
+
+    // Convert to LLR
+    let channel_llr = MyTinyTestDecoder::into_llr(&channel_output);
+
+    c.bench_function("small decoder", |b| {
+        b.iter(|| decoder_6_3_4_3_gf16.min_sum(black_box(channel_llr)))
+    });
+}
+
+criterion_group!(benches, small_decoder_benchmark, medium_decoder_benchmark);
 criterion_main!(benches);

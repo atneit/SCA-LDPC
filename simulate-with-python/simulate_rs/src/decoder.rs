@@ -15,7 +15,7 @@ use std::{
     env::VarError,
     marker::PhantomData,
     mem::{self, transmute, MaybeUninit},
-    ops::{Add, RangeInclusive},
+    ops::{Add, AddAssign, Range, RangeInclusive},
 };
 
 macro_rules! debug_unwrap {
@@ -234,6 +234,103 @@ impl<const DC: usize, BType: Default + Copy> Default for Configuration<DC, BType
     }
 }
 
+struct ConfigurationIterator<const DC: usize, const Q: usize, BType> {
+    finite_d_values: [[BType; Q]; DC],
+    num: [usize; DC],
+    len: usize,
+    indices: Option<[usize; DC]>,
+    d_values: Option<[BType; DC]>,
+}
+
+impl<const DC: usize, const Q: usize, BType> ConfigurationIterator<DC, Q, BType>
+where
+    BType: Copy + Integer + Signed + AddAssign,
+{
+    /// Updates d_values according to indices.
+    /// Returns whether or not the configuration is valid (summation of b_values = 0)
+    fn update_d_values(&mut self) -> bool {
+        if let Some(indices) = self.indices {
+            if self.d_values.is_none() {
+                self.d_values.insert([BType::zero(); DC]);
+            }
+            let d_values = debug_unwrap!(self.d_values.as_mut());
+            let mut dsum = BType::zero();
+            for ((idx, d), available) in indices[0..self.len - 1]
+                .iter()
+                .zip(d_values)
+                .zip(self.finite_d_values)
+            {
+                *d = available[*idx];
+                dsum += *d;
+            }
+            // if -dsum is a possible value, then the configuration is valid
+            let available = self.finite_d_values[self.len - 1];
+            if available.contains(&(-dsum)) {
+                let d_values = debug_unwrap!(self.d_values.as_mut());
+                d_values[self.len - 1] = -dsum;
+                true
+            } else {
+                false
+            }
+        } else {
+            // Empty d_values
+            self.d_values.take();
+            false
+        }
+    }
+
+    /// Increments the indices such that all permutations are reached
+    /// Returns if the increment was successful or not
+    fn increment_indices(&mut self) -> bool {
+        if let Some(ref mut indices) = self.indices {
+            // we have a state, let's update it
+            for (idx, num) in indices[0..self.len - 1].iter_mut().zip(self.num) {
+                if *idx + 1 < num {
+                    // We increase the index, because we can
+                    *idx += 1;
+                    return true; // nothing more to be done
+                }
+                // we move on to the next index, but reset the current one first
+                *idx = 0;
+            }
+
+            // we failed to increment
+            false
+        } else {
+            // we don't have a state, let's start with the [0, 0,..., 0] state
+            // but first check that it's a valid state
+            if !self.num[0..self.len].contains(&0) {
+                self.indices = Some([0; DC])
+            }
+            true
+        }
+    }
+
+    /// Returns the next valid configuration or None.
+    ///
+    /// Emulates an iterator, but does not implement a real iterator
+    /// because Iterator does not allow for references into itself due
+    /// to conflicting lifetime requirements
+    pub fn next(&mut self) -> Option<&[BType]> {
+        loop {
+            // Update indices
+            if !self.increment_indices() {
+                return None; // No more configurations left
+            }
+            // if valid, use it, otherwise find next
+            if self.update_d_values() {
+                break;
+            }
+        }
+
+        // return reference to the current d_values
+        match &self.d_values {
+            Some(ref d_values) => Some(&d_values[0..self.len]),
+            None => todo!(),
+        }
+    }
+}
+
 type Container2D<T> = rustc_hash::FxHashMap<Key2D, T>;
 //type Container2D<T> = HashMap<Key2D, T>;
 
@@ -316,7 +413,7 @@ impl<
         BType,
     > Decoder<N, R, DC, DV, Q, B, BType>
 where
-    BType: Integer + Signed + NumCast + Copy + FromPrimitive + TryInto<usize> + Default,
+    BType: Integer + Signed + NumCast + AddAssign + Copy + FromPrimitive + TryInto<usize> + Default,
 {
     pub const N: usize = N;
     pub const R: usize = R;
@@ -408,7 +505,6 @@ where
 
         let mut it = 0;
         // Fill array with -B values
-        let mut d_values = [*self.brange.start(); DC];
         let mut configurations = Vec::<Configuration<DC, BType>>::new();
         'decoding: loop {
             it += 1;
@@ -424,37 +520,27 @@ where
                         .map(|key| debug_unwrap!(&edges[&key].v2c.as_ref()))
                         .collect();
 
-                    let last_idx = alpha_i.len() - 1;
-                    let first_vars = 0..(last_idx);
-                    'find_configurations: loop {
-                        if let Some(dsum) = self.calc_dsum(&alpha_i, first_vars.clone(), &d_values)
-                        {
-                            // This is a valid configuration (not taking alpha_ij == infinity into account)
-                            // set final d_value to counterweight dsum (to make parity check succeed).
-                            d_values[last_idx] = -dsum;
-                            assert!(self.brange.contains(&d_values[last_idx]));
-                            // Generate configuration
-                            let mut cfg = Configuration::default();
-                            cfg.sum = alpha_i
-                                .iter()
-                                .zip(d_values)
-                                .zip(&mut cfg.alpha_i)
-                                .zip(&mut cfg.d_values)
-                                .map(|(((src_alpha_ij, src_d), dst_alpha_ijd), dst_d)| {
-                                    *dst_alpha_ijd = src_alpha_ij.0[Self::b2i(src_d)];
-                                    *dst_d = src_d;
-                                    *dst_alpha_ijd
-                                })
-                                .sum();
-                            // We check if the configuration is possible based on alpha values
-                            if cfg.sum.is_finite() {
-                                configurations.push(cfg)
-                            }
-                        }
-                        if self.increment_d_values(&mut d_values[first_vars.clone()]) {
-                            // There are no more configurations to check
-                            // increment_d_values have reset d_values back to [-B, -B, ..., -B]
-                            break 'find_configurations;
+                    //println!("it: {}, check_idx: {}", it, check_idx);
+                    let mut finite_d_values = Self::make_finite_d_values_iterator(&alpha_i);
+                    while let Some(d_values) = finite_d_values.next() {
+                        // This is a valid configuration where the final d_value is set
+                        // to counterweight dsum (to make parity check succeed).
+                        // Generate configuration
+                        let mut cfg = Configuration::default();
+                        cfg.sum = alpha_i
+                            .iter()
+                            .zip(d_values)
+                            .zip(&mut cfg.alpha_i)
+                            .zip(&mut cfg.d_values)
+                            .map(|(((src_alpha_ij, src_d), dst_alpha_ijd), dst_d)| {
+                                *dst_alpha_ijd = src_alpha_ij.0[Self::b2i(*src_d)];
+                                *dst_d = *src_d;
+                                *dst_alpha_ijd
+                            })
+                            .sum();
+                        // We check if the configuration is possible based on alpha values
+                        if cfg.sum.is_finite() {
+                            configurations.push(cfg)
                         }
                     }
                 }
@@ -509,21 +595,15 @@ where
         Ok(hard_decision)
     }
 
-    fn calc_dsum(
-        &self,
-        alpha_i: &[&QaryLlrs<Q>],
-        first_vars: std::ops::Range<usize>,
-        d_values: &[BType; DC],
-    ) -> Option<BType> {
+    fn calc_dsum(&self, alpha_i: &[&QaryLlrs<Q>], d_values: &[BType]) -> Option<BType> {
         let mut dsum = BType::zero();
 
-        for (var, alpha_ij) in (alpha_i[first_vars]).iter().enumerate() {
-            let d = d_values[var];
-            dsum = dsum + d;
+        for (d, alpha_ij) in d_values.iter().zip(alpha_i) {
+            dsum += *d;
             if !self.brange.contains(&dsum) {
                 return None;
             }
-            let alpha_ijd = alpha_ij.0[Self::b2i(d)];
+            let alpha_ijd = alpha_ij.0[Self::b2i(*d)];
             if !alpha_ijd.is_finite() {
                 return None;
             }
@@ -615,6 +695,30 @@ where
         let mut val: isize = val.to_isize().unwrap();
 
         (val + (B as isize)) as usize
+    }
+
+    fn make_finite_d_values_iterator(
+        alpha_i: &[&QaryLlrs<Q>],
+    ) -> ConfigurationIterator<DC, Q, BType> {
+        let mut cfg_iter = ConfigurationIterator {
+            finite_d_values: [[BType::zero(); Q]; DC],
+            num: [0; DC],
+            len: 0,
+            indices: None,
+            d_values: None,
+        };
+
+        for (j, alpha_ij) in alpha_i.iter().enumerate() {
+            for (d, alpha_ijd) in alpha_ij.0.iter().enumerate() {
+                if alpha_ijd.is_finite() {
+                    cfg_iter.finite_d_values[j][cfg_iter.num[j]] = Self::i2b(d);
+                    cfg_iter.num[j] += 1;
+                }
+            }
+            cfg_iter.len += 1;
+        }
+
+        cfg_iter
     }
 }
 

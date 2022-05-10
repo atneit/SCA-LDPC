@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "type": "lldb",
+            "request": "launch",
+            "name": "cargo bench",
+            "program": "${workspaceFolder}/target/debug/deps/decoder-5112f5994917eb64",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
             "name": "main.py",
             "type": "python",
             "request": "launch",

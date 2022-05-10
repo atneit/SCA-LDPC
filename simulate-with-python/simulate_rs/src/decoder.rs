@@ -429,7 +429,7 @@ where
                     'find_configurations: loop {
                         if let Some(dsum) = self.calc_dsum(&alpha_i, first_vars.clone(), &d_values)
                         {
-                            // This is a valid configuration
+                            // This is a valid configuration (not taking alpha_ij == infinity into account)
                             // set final d_value to counterweight dsum (to make parity check succeed).
                             d_values[last_idx] = -dsum;
                             assert!(self.brange.contains(&d_values[last_idx]));
@@ -446,7 +446,10 @@ where
                                     *dst_alpha_ijd
                                 })
                                 .sum();
-                            configurations.push(cfg);
+                            // We check if the configuration is possible based on alpha values
+                            if cfg.sum.is_finite() {
+                                configurations.push(cfg)
+                            }
                         }
                         if self.increment_d_values(&mut d_values[first_vars.clone()]) {
                             // There are no more configurations to check
@@ -455,6 +458,8 @@ where
                         }
                     }
                 }
+
+                assert!(!configurations.is_empty());
 
                 // Find and send minimum Llrs to variables
                 for (j, key) in check.variables(check_idx).enumerate() {
@@ -466,6 +471,7 @@ where
                     }
                     debug_unwrap!(edges.get_mut(&key)).c2v.replace(beta_ij);
                 }
+                configurations.clear();
             }
 
             // Variable node update (sum)
@@ -518,7 +524,7 @@ where
                 return None;
             }
             let alpha_ijd = alpha_ij.0[Self::b2i(d)];
-            if alpha_ijd.is_infinite() {
+            if !alpha_ijd.is_finite() {
                 return None;
             }
         }

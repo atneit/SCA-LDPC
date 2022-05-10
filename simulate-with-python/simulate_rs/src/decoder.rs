@@ -234,6 +234,9 @@ impl<const DC: usize, BType: Default + Copy> Default for Configuration<DC, BType
     }
 }
 
+/// (fake) Iterator that finds all possible configurations.
+/// Performance is improved greatly by only trying d_values
+/// which are possible according to alpha values
 struct FiniteDValueIterator<const DC: usize, const Q: usize, BType> {
     finite_d_values: [[BType; Q]; DC],
     num: [usize; DC],

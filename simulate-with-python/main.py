@@ -29,6 +29,7 @@ from simulate.decode import (
     simulate_frame_error_rate_rust,
     ErrorsProvider,
 )
+import simulate.distance_spectrum
 from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
@@ -214,6 +215,7 @@ class Commands(CommandsBase):
         suite.addTest(doctest.DocTestSuite(simulate.utils))
         suite.addTest(doctest.DocTestSuite(simulate.make_code))
         suite.addTest(doctest.DocTestSuite(simulate.decode))
+        suite.addTest(doctest.DocTestSuite(simulate.distance_spectrum))
 
         logger.info("Disabling further logging output")
         logging.disable(logging.CRITICAL)

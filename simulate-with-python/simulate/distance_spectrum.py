@@ -55,16 +55,21 @@ def gen_array_ds_multiplicity(
     >>> a = gen_array_ds_multiplicity(10, 3, 1, rng)
     >>> ds = calc_ds(a)
     >>> (a, ds)
-    (array([1, 0, 0, 1, 0, 1, 0, 0, 0, 0]), array([0, 0, 1, 1, 0, 1]))
+    (array([0, 0, 1, 0, 0, 0, 0, 0, 1, 1]), array([0, 1, 0, 1, 1, 0]))
+
+    >>> a = gen_array_ds_multiplicity(10, 4, 2, rng)
+    >>> ds = calc_ds(a)
+    >>> (a, ds)
+    (array([0, 1, 1, 1, 0, 1, 0, 0, 0, 0]), array([0, 2, 2, 1, 1, 0]))
     """
     output = np.zeros(length, dtype=int)
-    first = rng.random_integers(0, length - 1)
+    rnd_choices = rng.choice(length, size=length, replace=False)
+    first = rnd_choices[0]
     output[first] = 1
     ds = calc_ds(output)
     w = 1
-    while w < weight:
-        # Get random addition
-        next = rng.random_integers(0, length - 1)
+    # Get random addition
+    for next in rnd_choices[1:]:
         # Calculate effect on distance spectrum
         new_ds = check_ds_addition_limit(output, ds, next, max_multiplicity)
         # Check if valid
@@ -72,13 +77,22 @@ def gen_array_ds_multiplicity(
             ds = new_ds
             output[next] = 1
             w += 1
-    return output
+        # Check if we are done
+        if w >= weight:
+            return output
+    raise Exception(
+        f"Failed to find a random array with more than {w} number of set positions"
+    )
 
 
 if __name__ == "__main__":
-    print("In module products __package__, __name__ ==", __package__, __name__)
     import utils
+    import sys
 
-    rng = utils.make_random_state(0)
-    a = gen_array_ds_multiplicity(10, 3, 1, rng)
-    ds = calc_ds(a)
+    with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
+        rng = utils.make_random_state(0)
+        a = gen_array_ds_multiplicity(17664, 61, 1, rng)
+        # a = gen_array_ds_multiplicity(50, 9, 1, rng)
+        print(a)
+        ds = calc_ds(a)
+        print(ds)

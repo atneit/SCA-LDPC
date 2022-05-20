@@ -2,6 +2,7 @@ import sys
 import numpy as np
 from scipy.linalg import circulant
 from . import utils
+from . import distance_spectrum
 import logging
 
 logger = logging.getLogger(__name__)
@@ -166,3 +167,11 @@ def make_regular_ldpc_parity_check_matrix_identity(
             np.identity(r, dtype=int),
         ]
     )
+
+
+def make_random_ldpc_parity_check_matrix_with_identity(n, weight, seed=None):
+
+    first_row = distance_spectrum.gen_array_ds_multiplicity(n, weight, 1, seed)
+    H0 = circulant(first_row)
+    H = flatten_matrix_parts([H0, np.identity(n, dtype=int)])
+    return H

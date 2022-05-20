@@ -8,6 +8,7 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 # Activate logger
+from ast import arg
 import logging, coloredlogs
 
 coloredlogs.install(level="DEBUG")
@@ -20,6 +21,7 @@ logger.debug("Importing dependencies...")
 import simulate
 from simulate.make_code import (
     make_qc_parity_check_matrix,
+    make_random_ldpc_parity_check_matrix_with_identity,
     make_regular_ldpc_parity_check_matrix,
     make_regular_ldpc_parity_check_matrix_identity,
 )
@@ -83,6 +85,13 @@ class Commands(CommandsBase):
             help="Number of threads to run decoders on",
             default=4,
         )
+
+    def command_hqc_simulate(self, args: argparse.Namespace):
+        rng = make_random_state(args.seed)
+        # H = make_random_ldpc_parity_check_matrix_with_identity(17664, 30, rng)
+        with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
+            H = make_random_ldpc_parity_check_matrix_with_identity(25, 5, rng)
+            print(H)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

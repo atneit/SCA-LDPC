@@ -948,6 +948,7 @@ dependencies = [
  "criterion",
  "fastcmp",
  "g2p",
+ "liboqs-rs-bindings",
  "log",
  "ndarray",
  "num",

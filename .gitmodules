@@ -1,3 +1,3 @@
-[submodule "dependencies/open-quantum-safe-attacks"]
-	path = dependencies/open-quantum-safe-attacks
-	url = https://github.com/atneit/open-quantum-safe-attacks.git
+[submodule "dependencies/liboqs-rs-bindings"]
+	path = dependencies/liboqs-rs-bindings
+	url = https://github.com/atneit/liboqs-rs-bindings.git

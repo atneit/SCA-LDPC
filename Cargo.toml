@@ -2,6 +2,7 @@
 
 members = [
     "simulate-with-python/simulate_rs",
+    "dependencies/liboqs-rs-bindings/"
 ]
 
 

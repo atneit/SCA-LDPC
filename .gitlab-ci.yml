@@ -18,6 +18,9 @@ cache:
 rust:test:
   stage: test
   script:
+    - pushd dependencies/liboqs-rs-bindings
+    - ./build-oqs.sh --yes
+    - popd
     - cargo install cargo2junit
     - cargo test --target-dir target/test --
       -Z unstable-options --format json --report-time |

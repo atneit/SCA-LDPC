@@ -41,7 +41,7 @@ fi
 if [ ! -f "$LIBOQS_C/build/lib/liboqs.a" ]; then
     echo -e "${COLOR}C-library not built. Building now (manually check correct system dependencies are installed, then press enter)...${RESET}"
     pushd $LIBOQS_RS
-    bash build-oqs.sh
+    bash build-oqs.sh --yes
     popd
 fi
 

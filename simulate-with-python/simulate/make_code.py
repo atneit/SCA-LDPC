@@ -170,6 +170,28 @@ def make_regular_ldpc_parity_check_matrix_identity(
 
 
 def make_random_ldpc_parity_check_matrix_with_identity(n, weight, seed=None):
+    """
+    Constructs a regular ldpc parity check matrix.
+
+    The shape is [H_(n*n)|I_(n*n)] where the two square matrices H and I are both cyclic.
+
+    I is the identity matrix.
+
+    H is a cyclic matrix with a random first row. The first row is constructed such that
+    the distance spectrum of the non-zero positions is 0 or 1, for all distances.
+
+    >>> make_random_ldpc_parity_check_matrix_with_identity(10, 3, utils.make_random_state(0))
+    array([[0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+           [0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+           [0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+           [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+           [0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+           [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+           [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+    """
 
     first_row = distance_spectrum.gen_array_ds_multiplicity(n, weight, 1, seed)
     H0 = circulant(first_row)

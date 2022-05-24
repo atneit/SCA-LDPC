@@ -32,6 +32,7 @@ from simulate.decode import (
     ErrorsProvider,
 )
 import simulate.distance_spectrum
+from simulate.hqc import simulate_hqc_idealized_oracle
 from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
@@ -88,10 +89,7 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        # H = make_random_ldpc_parity_check_matrix_with_identity(17664, 30, rng)
-        with np.printoptions(threshold=sys.maxsize, linewidth=sys.maxsize):
-            H = make_random_ldpc_parity_check_matrix_with_identity(25, 5, rng)
-            print(H)
+        simulate_hqc_idealized_oracle(rng)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

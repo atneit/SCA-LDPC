@@ -1,6 +1,13 @@
+#!/bin/env python
+
+# dirty fix for running file as executable
+import sys
+sys.path.append("../simulate")
+
 import itertools
 import numpy as np
 from .make_code import make_random_ldpc_parity_check_matrix_with_identity
+from .utils import make_random_state
 from simulate_rs import Hqc128
 import logging
 
@@ -37,6 +44,7 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState):
         "Creating random HQC keypair (randomness does not depend on provided seed)!"
     )
     (pub, priv) = HQC.keypair()  # Randomness does not depend on rng
+    (x, y) = HQC.secrets_from_key(priv)
 
     # generate / select plain text message
     pt = search_distinguishable_plaintext(HQC, rng)
@@ -44,7 +52,7 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState):
     # Generate a parity check matrix (H)
     logger.info(f"Create random (L/M)DPC parity check of size {N}!")
     H = make_random_ldpc_parity_check_matrix_with_identity(N, 3, rng)
-    
+
     # encapsulate with r_2 and e to all-zero. Set r_1 to h_0
     h0_len = len(H[0])//2
     h0 = H[0][0:h0_len]
@@ -58,3 +66,29 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState):
     # for each such block find bits that: if flipped back, results in decoding success
 
     # miss-classification probabilities are derrived from "idealized-oracle" calls in CHES2022 paper.
+
+
+def test_hqc_encaps_with_plaintext_and_r1():
+    """
+    This is a unit test. 
+    
+    We use doctest for test discovery:
+    >>> test_hqc_encaps_with_plaintext_and_r1()
+    True
+    """
+    rng = make_random_state(0)
+    HQC = Hqc128()
+    (pub, priv) = HQC.keypair()  # Randomness does not depend on rng
+    (x, y) = HQC.secrets_from_key(priv)
+    y.sort()
+    pt = search_distinguishable_plaintext(HQC, rng)
+    (ct, ss) = HQC.encaps_with_plaintext_and_r1(pub, pt, y)
+    eprime = HQC.eprime(ct, priv)
+    bits = np.unpackbits(eprime)
+
+    # TODO: fix test to decide if encaps_with_plaintext_and_r1 works as intended
+
+    return True
+
+if __name__ == "__main__":
+    test_hqc_encaps_with_plaintext_and_r1()

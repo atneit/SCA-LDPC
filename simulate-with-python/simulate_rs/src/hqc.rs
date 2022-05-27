@@ -49,6 +49,15 @@ macro_rules! register_py_hqc_class {
                 )
             }
 
+            /// Extracts x and y from secret key
+            #[staticmethod]
+            fn secrets_from_key(secretkey: &[u8]) -> Result<(Vec<u64>, Vec<u32>)> {
+                let mut sk = <HQC as Kem>::SecretKey::new();
+                sk.as_mut_slice().copy_from_slice(secretkey);
+                let (x, y) = HQC::secrets_from_key(&sk).map_err(anyhow::Error::msg)?;
+                Ok((x.as_slice().to_vec(), y.as_slice().to_vec()))
+            }
+
             /// Returns the number of rejections for the provided plaintext
             /// 
             /// Format: single value with ("number of seed expansions" * 1000 + nbr rejections)
@@ -101,8 +110,40 @@ macro_rules! register_py_hqc_class {
                         ss.as_slice()
                 )))
             }
+
+            /// Extracts the eprime from the ciphertext by decoding it
+            #[staticmethod]
+            fn eprime<'p>(py: Python<'p>, ciphertext: Vec<u8>, secretkey: &[u8]) -> Result<&'p PyByteArray>{
+                let mut ct = <HQC as Kem>::Ciphertext::new();
+                let mut sk = <HQC as Kem>::SecretKey::new();
+                ct.as_mut_slice().copy_from_slice(&ciphertext);
+                sk.as_mut_slice().copy_from_slice(secretkey);
+                let eprime = HQC::eprime(&mut ct, &mut sk).map_err(anyhow::Error::msg)?;
+                Ok(PyByteArray::new(
+                    py,
+                    eprime.as_slice()
+                ))
+            }
         }
 
         $m.add_class::<$hqcver>()?;
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use liboqs_rs_bindings as oqs;
+    use oqs::{Kem, hqc::{Hqc128, Hqc}, KemBuf};
+
+    #[test]
+    fn hqc_secrets_from_key() {
+        let (_pubkey, secretkey) = Hqc128::keypair().unwrap();
+        let (x, y) = Hqc128::secrets_from_key(&secretkey).unwrap();
+        let mut ones = 0;
+        for xi in x.as_slice() {
+            ones += xi.count_ones();
+        }
+        assert_eq!(ones, Hqc128::params().PARAM_OMEGA);
+        assert_eq!(y.as_slice().len(), Hqc128::params().PARAM_OMEGA);
+    }
 }

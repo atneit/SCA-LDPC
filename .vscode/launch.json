@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: HQC",
+            "type": "python",
+            "request": "launch",
+            "module": "simulate.hqc",
+            "cwd": "${workspaceFolder}/simulate-with-python/",
+            "justMyCode": true
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "cargo bench",
@@ -20,7 +28,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "qc_ldpc_code"
+                "hqc_simulate"
             ]
         }
     ]

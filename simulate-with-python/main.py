@@ -223,6 +223,7 @@ class Commands(CommandsBase):
         suite.addTest(doctest.DocTestSuite(simulate.make_code))
         suite.addTest(doctest.DocTestSuite(simulate.decode))
         suite.addTest(doctest.DocTestSuite(simulate.distance_spectrum))
+        suite.addTest(doctest.DocTestSuite(simulate.hqc))
 
         logger.info("Disabling further logging output")
         logging.disable(logging.CRITICAL)

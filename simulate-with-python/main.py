@@ -225,7 +225,7 @@ class Commands(CommandsBase):
         suite.addTest(doctest.DocTestSuite(simulate.distance_spectrum))
         suite.addTest(doctest.DocTestSuite(simulate.hqc))
 
-        logger.info("Disabling further logging output")
+        logger.info("Starting tests and disabling further logging output")
         logging.disable(logging.CRITICAL)
         results = None
         if xml:

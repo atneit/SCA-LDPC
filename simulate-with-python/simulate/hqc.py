@@ -68,6 +68,34 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState):
     # miss-classification probabilities are derrived from "idealized-oracle" calls in CHES2022 paper.
 
 
+def shift_and_add_mod_2_sparse(y, j, n):
+    """
+    This accepts a sparse vector (indexes of set bits) and adds 
+    itself with itself but bit-shifted right with j steps, modulo 2.
+    The bitshift is a rotation over a vector of size n.
+
+    e.g. return y + ((y >> j) % n)
+
+    >>> shift_and_add_mod_2_sparse([1, 5, 8, 12], 3, 15)
+    [0, 1, 4, 5, 11, 12]
+    """
+    y_shift_j = [(yi + j)%n for yi in y]
+    yyj = y + y_shift_j
+    del y
+    del y_shift_j
+    yyj.sort()
+    ret = []
+    discarded = False
+    for (y1, y2) in zip(yyj[:], yyj[1:]+[n+1]):
+        if discarded:
+            discarded = False
+        elif y1 == y2:
+            discarded = True
+        else:
+            ret.append(y1)
+            discarded = False
+    return ret
+
 def test_hqc_encaps_with_plaintext_and_r1():
     """
     This is a unit test. 
@@ -76,17 +104,22 @@ def test_hqc_encaps_with_plaintext_and_r1():
     >>> test_hqc_encaps_with_plaintext_and_r1()
     True
     """
-    rng = make_random_state(0)
     HQC = Hqc128()
+    N = HQC.params("N")
     (pub, priv) = HQC.keypair()  # Randomness does not depend on rng
-    (x, y) = HQC.secrets_from_key(priv)
-    y.sort()
+    rng = make_random_state(0)
     pt = search_distinguishable_plaintext(HQC, rng)
-    (ct, ss) = HQC.encaps_with_plaintext_and_r1(pub, pt, y)
-    eprime = HQC.eprime(ct, priv)
-    bits = np.unpackbits(eprime)
+    for j in rng.choice(N, 100, replace=False):
+        (_, y) = HQC.secrets_from_key(priv)
+        yyj = shift_and_add_mod_2_sparse(y, j, N)
+        (ct, _) = HQC.encaps_with_plaintext_and_r1(pub, pt, [0, j])
+        eprime = HQC.eprime(ct, priv, pt)
+        bits = np.unpackbits(eprime, bitorder='little')
+        indices = [i for (i, x) in enumerate(bits) if x]
 
-    # TODO: fix test to decide if encaps_with_plaintext_and_r1 works as intended
+        for (yi, ei) in zip(yyj, indices):
+            if yi != ei:
+                return False
 
     return True
 

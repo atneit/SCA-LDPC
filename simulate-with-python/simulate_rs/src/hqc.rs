@@ -113,12 +113,14 @@ macro_rules! register_py_hqc_class {
 
             /// Extracts the eprime from the ciphertext by decoding it
             #[staticmethod]
-            fn eprime<'p>(py: Python<'p>, ciphertext: Vec<u8>, secretkey: &[u8]) -> Result<&'p PyByteArray>{
+            fn eprime<'p>(py: Python<'p>, ciphertext: Vec<u8>, secretkey: &[u8], plaintext: &[u8]) -> Result<&'p PyByteArray>{
                 let mut ct = <HQC as Kem>::Ciphertext::new();
                 let mut sk = <HQC as Kem>::SecretKey::new();
+                let mut m = <HQC as KemWithRejectionSampling>::Plaintext::new();
                 ct.as_mut_slice().copy_from_slice(&ciphertext);
                 sk.as_mut_slice().copy_from_slice(secretkey);
-                let eprime = HQC::eprime(&mut ct, &mut sk).map_err(anyhow::Error::msg)?;
+                m.as_mut_slice().copy_from_slice(plaintext);
+                let eprime = HQC::eprime_m(&mut ct, &mut sk, &mut m).map_err(anyhow::Error::msg)?;
                 Ok(PyByteArray::new(
                     py,
                     eprime.as_slice()

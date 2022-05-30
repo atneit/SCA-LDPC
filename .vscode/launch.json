@@ -4,6 +4,12 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    {
+        "type": "lldb",
+        "request": "attach",
+        "name": "Attach to PID",
+        "pid": "${command:pickMyProcess}" // use ${command:pickProcess} to pick other users' processes
+    },
         {
             "name": "Python: HQC",
             "type": "python",
@@ -21,14 +27,14 @@
             "cwd": "${workspaceFolder}"
         },
         {
-            "name": "main.py",
+            "name": "main.py test",
             "type": "python",
             "request": "launch",
             "program": "simulate-with-python/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "hqc_simulate"
+                "test"
             ]
         }
     ]

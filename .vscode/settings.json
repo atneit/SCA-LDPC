@@ -49,8 +49,11 @@
         "scipy",
         "staticmethod",
         "submessages",
+        "unflipp",
+        "unflipped",
         "Uninit",
-        "virtualenv"
+        "virtualenv",
+        "yiter"
     ],
     "python.formatting.provider": "black",
     "editor.formatOnSave": false,

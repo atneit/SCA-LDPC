@@ -36,6 +36,18 @@
             "args": [
                 "test"
             ]
+        },
+        {
+            "name": "main.py hqc_simulate",
+            "type": "python",
+            "request": "launch",
+            "program": "simulate-with-python/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "hqc_simulate",
+                "--verbose"
+            ]
         }
     ]
 }

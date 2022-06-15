@@ -1,4 +1,5 @@
 import numpy as np
+import gc
 
 
 def calc_ds(input: np.array):
@@ -80,6 +81,7 @@ def gen_array_ds_multiplicity(
         # Check if we are done
         if w >= weight:
             return output
+        gc.collect()
     raise Exception(
         f"Failed to find a random array with more than {w} number of set positions"
     )

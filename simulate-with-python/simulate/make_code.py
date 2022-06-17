@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 from scipy.linalg import circulant
 from . import utils

@@ -1,10 +1,15 @@
 #!/bin/env python
 
-# dirty fix for running file as executable
-import sys
-from typing import Union
+# Ugly hack to allow import from the current package
+# if running current module as main. Please forgive the heresy.
+if __name__ == "__main__" and __package__ is None:
+    from sys import path
+    from os.path import dirname as dir
 
-sys.path.append("../simulate")
+    path.append(dir(path[0]))
+    __package__ = "simulate"
+
+from typing import Union
 
 import itertools
 import numpy as np
@@ -167,18 +172,18 @@ def next_success_bit(rng: np.random.RandomState, HQC, priv, pt, ct, bit_status, 
         if b["status"] == FlipStatus.FLIPPED and b["result"] == IfFlipResult.UNKNOWN
     ]
     for bit in rng.choice(available_bits, len(available_bits), replace=False):
-        if bit_status[bit]["status"] == FlipStatus.FLIPPED:
+        ct = flip_single_bit(ct, block, bit, N, N2)
+        bit_status[bit]["status"] = FlipStatus.UNFLIPPED
+        (pt_prime, _, _, _, _) = HQC.decode_intermediates(ct, priv)
+        if pt == pt_prime:
+            bit_status[bit]["result"] = IfFlipResult.SUCCESS
+            # We flip it back so that we can try again and find another bit
+            bit_status[bit]["status"] = FlipStatus.FLIPPED
             ct = flip_single_bit(ct, block, bit, N, N2)
-            bit_status[bit]["status"] = FlipStatus.UNFLIPPED
-            (pt_prime, _, _, _, _) = HQC.decode_intermediates(ct, priv)
-            if pt == pt_prime:
-                bit_status[bit]["result"] = IfFlipResult.SUCCESS
-                # We flip it back so that
-                ct = flip_single_bit(ct, block, bit, N, N2)
-                logger.info(f"Decoding Success if flipping bit {bit} in block {block}")
-                return (bit, ct)
-            else:
-                logger.debug(f"Flipped bit {bit} of outer block {block}")
+            logger.info(f"Decoding Success if flipping bit {bit} in block {block}")
+            return (bit, ct)
+        else:
+            logger.debug(f"Flipped bit {bit} of outer block {block}")
 
     return None
 
@@ -199,7 +204,8 @@ def decode(Hin: np.array, N: int, y_sparse):
 
     # Create empty "message" to be decoded
     assumed_zero = np.full(N, 0.00371, dtype=np.float64)
-    failed_checks = np.full(R, 0.9942, dtype=np.float64)
+    #failed_checks = np.full(R, 0.9942, dtype=np.float64)
+    failed_checks = np.full(R, 0.0, dtype=np.float64)
     channel_probs = np.concatenate((assumed_zero, failed_checks))
 
     # Creating the decoder
@@ -210,13 +216,30 @@ def decode(Hin: np.array, N: int, y_sparse):
         channel_probs=channel_probs,
     )
 
-    logger.debug(f"Attempting decode with {R} checks.")
+    logger.info(f"Attempting decode with {R} checks.")
 
     msg = np.concatenate((np.zeros(N, dtype=int), np.ones(R, dtype=int)))
 
     decoded = bpd.decode(msg)
+    decoded_msg_sparse = []
+    decoded_checks_sparse = []
 
-    unequal = 0
+    for (i, x) in enumerate(decoded[:N]):
+        if x:
+            s = str(i)
+            if i in y_sparse:
+                s += "*"
+            decoded_msg_sparse.append(s)
+    for (i, x) in enumerate(decoded[N:]):
+        if not x:
+            s = str(N+i)
+            decoded_checks_sparse.append(s)
+
+    logger.info(f"Decoded with {R} checks, made {len(decoded_msg_sparse)} "\
+        f"flips to recover y: {decoded_msg_sparse} and found "\
+        f"{len(decoded_checks_sparse)} measurement errors: {decoded_checks_sparse}")
+
+    unequal = 0    
     yiter = iter(y_sparse)
     yii = next(yiter)
     for (i, yip) in enumerate(decoded):
@@ -250,6 +273,8 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
     )
     (pub, priv) = HQC.keypair()  # Randomness does not depend on 'rng'
     (_, y) = HQC.secrets_from_key(priv)
+    
+    logger.info(f"y: {sorted(y)}")
 
     # generate / select plain text message
     pt = search_distinguishable_plaintext(HQC, rng)
@@ -289,6 +314,11 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
                 # No more bits to flip in this block
                 # Make sure this block can be decoded
                 ct = flip_single_bit(ct, current_block, current_bit, N, N2)
+                current_block_status["status"] = FlipStatus.UNFLIPPED
+                bit_status[current_bit]["status"] = FlipStatus.UNFLIPPED
+                # Verify assumption of decoding success after bit flip
+                (pt_prime, _, _, _, _) = HQC.decode_intermediates(ct, priv)
+                assert pt_prime == pt
                 break
 
             (current_bit, ct) = ret
@@ -367,4 +397,6 @@ def test_hqc_encaps_with_plaintext_and_r1():
 
 
 if __name__ == "__main__":
-    test_hqc_encaps_with_plaintext_and_r1()
+    while test_hqc_encaps_with_plaintext_and_r1():
+        pass
+    print("Failure")

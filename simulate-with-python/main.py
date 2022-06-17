@@ -65,6 +65,13 @@ class Commands(CommandsBase):
             default=100,
             help="The number of runs to run the simulation for. Only relevant for simulations/commands that are non-deterministic.",
         )
+        parser.add_argument(
+            "--decode-every",
+            action="store",
+            type=int,
+            default=100,
+            help="Try to decode the simulation results every 'decode-every' time we add a data point.",
+        )
         error_group = parser.add_mutually_exclusive_group(required=False)
         error_group.add_argument(
             "--error-rate",
@@ -89,7 +96,7 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        simulate_hqc_idealized_oracle(rng)
+        simulate_hqc_idealized_oracle(rng, args.decode_every)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

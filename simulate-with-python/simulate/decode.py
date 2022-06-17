@@ -1,4 +1,3 @@
-from concurrent.futures import as_completed
 import numpy as np
 from ldpc import bp_decoder
 import logging

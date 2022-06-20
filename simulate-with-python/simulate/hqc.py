@@ -179,8 +179,7 @@ def next_success_bit(rng: np.random.RandomState, HQC, priv, pt, ct, bit_status, 
         for (i, b) in (enumerate(bit_status))
         if b["result"] == IfFlipResult.UNKNOWN and b["status"] == FlipStatus.UNFLIPPED
     ]
-    frac = 10
-    totry = (len(available_bits)+frac-1)//frac
+    totry = min(3, len(available_bits))
     for bit in rng.choice(available_bits, totry, replace=False):
         ct = flip_single_bit(ct, block, bit, N, N2)
         bit_status[bit]["status"] = bit_status[bit]["status"].toggled()
@@ -233,8 +232,7 @@ def next_failure_bit(rng: np.random.RandomState, HQC, priv, pt, ct, bit_status, 
         for (i, b) in (enumerate(bit_status))
         if b["result"] == IfFlipResult.UNKNOWN and b["status"] == FlipStatus.FLIPPED
     ]
-    frac = 10
-    totry = (len(available_bits)+frac-1)//frac
+    totry = min(3, len(available_bits))
     for bit in rng.choice(available_bits, totry, replace=False):
         ct = flip_single_bit(ct, block, bit, N, N2)
         bit_status[bit]["status"] = bit_status[bit]["status"].toggled()
@@ -290,7 +288,7 @@ def decode(Hin: np.array, N: int, checks: list, y_sparse):
     # Creating the decoder
     bpd = bp_decoder(
         H,
-        max_iter=N,
+        max_iter=100,
         bp_method="product_sum",
         channel_probs=channel_probs,
     )

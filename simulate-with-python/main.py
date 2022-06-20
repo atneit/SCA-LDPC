@@ -69,7 +69,7 @@ class Commands(CommandsBase):
             "--decode-every",
             action="store",
             type=int,
-            default=100,
+            default=500,
             help="Try to decode the simulation results every 'decode-every' time we add a data point.",
         )
         error_group = parser.add_mutually_exclusive_group(required=False)

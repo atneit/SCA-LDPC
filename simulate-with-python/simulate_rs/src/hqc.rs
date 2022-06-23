@@ -128,16 +128,17 @@ macro_rules! register_py_hqc_class {
             }
 
             #[staticmethod]
-            fn decode_intermediates<'p>(py: Python<'p>, ciphertext: Vec<u8>, secretkey: &[u8]) -> Result<(&'p PyByteArray,&'p PyByteArray,&'p PyByteArray,Vec<u64>,Vec<u64>,)> {
+            fn decode_intermediates<'p>(py: Python<'p>, ciphertext: Vec<u8>, secretkey: &[u8]) -> Result<(&'p PyByteArray,&'p PyByteArray,&'p PyByteArray,&'p PyByteArray,Vec<u64>,Vec<u64>,)> {
                 let mut ct = <HQC as Kem>::Ciphertext::new();
                 let mut sk = <HQC as Kem>::SecretKey::new();
                 ct.as_mut_slice().copy_from_slice(&ciphertext);
                 sk.as_mut_slice().copy_from_slice(secretkey);
-                let (m, rmencoded, rmdecoded, u, v) = HQC::decode_intermediates(&mut ct, &mut sk).map_err(anyhow::Error::msg)?;
+                let (m, rsencoded, rmdecoded, inp, u, v) = HQC::decode_intermediates(&mut ct, &mut sk).map_err(anyhow::Error::msg)?;
                 Ok((
                     PyByteArray::new(py, m.as_slice()),
-                    PyByteArray::new(py, rmencoded.as_slice()),
+                    PyByteArray::new(py, rsencoded.as_slice()),
                     PyByteArray::new(py, rmdecoded.as_slice()),
+                    PyByteArray::new(py, inp.as_slice()),
                     u.as_slice().to_vec(),
                     v.as_slice().to_vec()
                 ))

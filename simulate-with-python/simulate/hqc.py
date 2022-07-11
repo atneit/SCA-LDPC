@@ -47,6 +47,8 @@ class IfFlipResult(Enum):
     SUCCESS = 2
     FAILURE = 3
 
+class NoMoreUntestedRmBlocks(Exception):
+    pass
 
 def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
     """
@@ -125,24 +127,56 @@ def next_failure_block(rng: np.random.RandomState, HQC, priv, pt, ct, block_stat
     N = HQC.params("N")
     N1 = HQC.params("N1")
     N2 = HQC.params("N2")
+    outer_decoding_limit = 15
     if True:
         # Verify starting assumption
         assert hqc_decoding_oracle(HQC, ct, priv, pt)
-    for block in rng.choice(N1, N1, replace=False):
-        if block_status[block]["status"] == FlipStatus.UNFLIPPED:
-            logger.info(f"Flipping outer block {block}")
-            # flip block 'block' of v in ct
-            ct = toggle_outer_block(ct, block, N, N2)
-            block_status[block]["status"] = FlipStatus.FLIPPED
-            # Determine decryption failure or not
-            if not hqc_decoding_oracle(HQC, ct, priv, pt):
-                # undo the flip
-                ct = toggle_outer_block(ct, block, N, N2)
-                block_status[block]["status"] = FlipStatus.UNFLIPPED
-                block_status[block]["result"] = IfFlipResult.FAILURE
-                logger.info(f"Decoding Failure by flipping block {block}")
-                return (block, ct)
 
+    # First we flip up to 15 blocks that we have already evaluated
+    evaluated_blocks = [
+        i
+        for i in range(N1)
+        if block_status[i]["status"] == FlipStatus.UNFLIPPED
+        and block_status[i]["result"] != IfFlipResult.UNKNOWN
+    ]
+    to_sample = min(len(evaluated_blocks), outer_decoding_limit)
+    blocks = 0
+    for block in rng.choice(evaluated_blocks, to_sample, replace=False):
+        blocks += 1
+        logger.info(f"Flipping outer block {block} (evaluated)")
+        # flip block 'block' of v in ct
+        ct = toggle_outer_block(ct, block, N, N2)
+        block_status[block]["status"] = FlipStatus.FLIPPED
+
+    # Then we flip some unknown blocks so that the total flipped
+    # blocks goes up to outer_decoding_limit
+    unknown_blocks = [
+        i
+        for i in range(N1)
+        if block_status[i]["status"] == FlipStatus.UNFLIPPED
+        and block_status[i]["result"] == IfFlipResult.UNKNOWN
+    ]
+    for block in rng.choice(unknown_blocks, len(unknown_blocks), replace=False):
+        blocks += 1
+        logger.info(f"Flipping outer block {block} (unknown)")
+        # flip block 'block' of v in ct
+        ct = toggle_outer_block(ct, block, N, N2)
+        block_status[block]["status"] = FlipStatus.FLIPPED
+        if blocks == outer_decoding_limit:
+            # Verify still decoding success
+            assert hqc_decoding_oracle(HQC, ct, priv, pt)
+        elif blocks == outer_decoding_limit + 1:
+            # Verify decoding failure
+            assert not hqc_decoding_oracle(HQC, ct, priv, pt)
+
+            # undo the flip
+            ct = toggle_outer_block(ct, block, N, N2)
+            block_status[block]["status"] = FlipStatus.UNFLIPPED
+            block_status[block]["result"] = IfFlipResult.FAILURE
+            logger.info(f"Decoding Failure by flipping block {block}")
+            return (block, ct)
+
+    # No more unknown blocks to evaluate
     return None
 
 
@@ -153,10 +187,25 @@ def reset_full_block_flips(HQC, ct, block_status):
     N = HQC.params("N")
     N2 = HQC.params("N2")
     for (block, bs) in enumerate(block_status):
-        if bs["status"] == FlipStatus.FLIPPED and bs["result"] == IfFlipResult.UNKNOWN:
+        if bs["status"] == FlipStatus.FLIPPED:
             logger.debug(f"Unflipping block {block}")
             ct = toggle_outer_block(ct, block, N, N2)
             bs["status"] = FlipStatus.UNFLIPPED
+    return ct
+
+
+def reset_current_block(HQC, ct, block, bit_status):
+    """
+    Resets all bits in the specified RM block where FlipStatus == FLIPPED
+    """
+    N = HQC.params("N")
+    N2 = HQC.params("N2")
+    available_bits = [
+        i for (i, b) in (enumerate(bit_status)) if b["status"] == FlipStatus.FLIPPED
+    ]
+    for bit in available_bits:
+        ct = flip_single_bit(ct, block, bit, N, N2)
+
     return ct
 
 
@@ -342,6 +391,7 @@ def find_successes_by_flipping(rng, HQC, priv, pt, ct, bit_status, block):
         if b["result"] == IfFlipResult.UNKNOWN and b["status"] == FlipStatus.UNFLIPPED
     ]
     successes = []
+    failures = []
     for bit in available_bits:
         ctmod = flip_single_bit(ct, block, bit, N, N2)
         # bit_status[bit]["status"] = bit_status[bit]["status"].toggled()
@@ -355,9 +405,13 @@ def find_successes_by_flipping(rng, HQC, priv, pt, ct, bit_status, block):
             # Return the unflipped ct
             successes.append(bit)
         else:
-            logger.debug(f"Discarded flipped bit {bit} of outer block {block}")
+            bit_status[bit]["result"] = IfFlipResult.FAILURE
+            logger.debug(
+                f"Still decoding failure if flipped bit {bit} of outer block {block}"
+            )
+            failures.append(bit)
 
-    return successes
+    return (successes, failures)
 
 
 def decode(Hin: np.array, N: int, checks: list, y_sparse):
@@ -373,7 +427,7 @@ def decode(Hin: np.array, N: int, checks: list, y_sparse):
     """
     R = Hin.shape[0]
 
-    H = np.concatenate((Hin, np.identity(R)), axis=1)
+    H = np.concatenate((Hin, np.identity(R, dtype=int)), axis=1, dtype=int)
     logger.debug(f"decode, N: {N}, R: {R}, Hin: {Hin.shape}, H: {H.shape}")
 
     # Create empty "message" to be decoded
@@ -461,21 +515,24 @@ def hqc_decoding_oracle(HQC, ct, priv, pt, debug=False, save_checkpoint_now=Fals
         global saved_rm_enc, saved_input_decoder
         hex_rs_enc = ""
         hex_rm_dec = ""
-        hex_input_decoder = ""
+        # hex_input_decoder = ""
+
+        pt_prime_num_rejections = HQC.num_rejections(bytes(pt_prime))
 
         if saved_rm_enc:
             hex_rs_enc = bytes_compare(rs_enc, saved_rm_enc)
             hex_rm_dec = bytes_compare(rm_dec, saved_rm_enc)
         hex_pt_prime = bytes_compare(pt_prime, pt)
-        if saved_input_decoder:
-            hex_input_decoder = bytes_compare(
-                input_decoder, saved_input_decoder, delimit=HQC.params("N2") // 8
-            )
+        # if saved_input_decoder:
+        #     hex_input_decoder = bytes_compare(
+        #         input_decoder, saved_input_decoder, delimit=HQC.params("N2") // 8
+        #     )
 
         logger.debug(f"Decapsulation called!")
-        logger.debug(f"decode in: '{hex_input_decoder}'")
+        # logger.debug(f"decode in: '{hex_input_decoder}'")
         logger.debug(f"RM decode: '{hex_rm_dec}'")
         logger.debug(f"Plaintext: '{hex_pt_prime}'")
+        logger.debug(f"Number of rejections for plaintext: {pt_prime_num_rejections}")
         logger.debug(f"RS encode: '{hex_rs_enc}'")
     else:
         global num_decodes
@@ -498,36 +555,23 @@ def cheating_sum_checks(row, r1_y_sparse):
     return (sum, sumpos)
 
 
-always_correct_neighbours = None
-
-
 def add_check(H, Hgen, r1_y_sparse, bit_n, checks, check):
     row = Hgen[bit_n]
-    
-    bit_set = bit_n in r1_y_sparse
-    logger.debug(f"check: {check}, bit_set: {bit_set}")
 
-    if check == bit_set:
-        logger.info(f"Adding row to H")
+    add = True
+    if r1_y_sparse:
+        bit_set = bit_n in r1_y_sparse
+        logger.debug(f"check: {check}, bit_set: {bit_set}")
+
+        if check != bit_set:
+            add = False
+            logger.warn(
+                f"Ignored false result for bit {bit_n}, check: {check}, bit value: {bit_set}!"
+            )
+    if add:
+        logger.info(f"Adding to H the check={check} corresponding to bit {bit_n}.")
         H = np.vstack([H, row]) if H is not None else Hgen[bit_n]
         checks.append(check)
-    else:
-        global always_correct_neighbours
-        neighbors = {
-            i: (bit_n + i) in r1_y_sparse
-            for i in range(-64, 64)
-            if i != 0 and i + bit_n >= 0 and i + bit_n < len(row)
-        }
-        if always_correct_neighbours is None:
-            always_correct_neighbours = list(neighbors.keys())
-        always_correct_neighbours = [
-            i
-            for (i, s) in neighbors.items()
-            if i in always_correct_neighbours and check == s % 2
-        ]
-        logger.warn(
-            f"Ignored false result for bit {bit_n}, check: {check}, sum: {sum}, affected y positions: {sumpos}. Always correct neighbours (so far): {always_correct_neighbours}!"
-        )
     return H
 
 
@@ -573,6 +617,46 @@ def sparse_times_sparse(A, B, N, mod=2):
     return a_times_b
 
 
+def add_checks(
+    check_value,
+    bits,
+    H,
+    Hgen,
+    current_block,
+    checks,
+    y_sparse,
+    y_times_r1,
+    N,
+    N2,
+    decode_every,
+):
+    for b in bits:
+        bit_n = current_block * N2 + b
+        # Add row from Hgen to H, to correspond to the parity check equation
+        # given by the current bit
+        H = add_check(
+            H,
+            Hgen,
+            y_times_r1,
+            bit_n,
+            checks,
+            check_value,
+        )
+        R = len(checks)
+
+        if R % decode_every == 0 and R != 0:
+            unsatisfied = checks.count(1)
+            logger.info(
+                f"{num_decodes} decapsulation calls performed so-far, "
+                f"{unsatisfied} unsatisfied checks, out of total {len(checks)}."
+            )
+            if decode(H, N, checks, y_sparse):
+                logger.info(f"Successfully decoded y")
+                return True
+
+    return (H, checks)
+
+
 def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int):
     """
     Main function for simulating HQC attack
@@ -588,6 +672,8 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
     N1 = HQC.params("N1")
     N2 = HQC.params("N2")
     weight = 20
+    H = None
+    checks = []
     logger.info(f"Params N: {N}, N1: {N1}, N2: {N2}, weight: {weight}")
 
     # construct/load key-pair to crack
@@ -607,7 +693,6 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
         # Generate a parity check matrix (H)
         logger.info(f"Create random (L/M)DPC parity check of size {N}!")
         Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
-        H = None
 
         # encapsulate with r_2 and e to all-zero. Set r_1 to h_0
         r1_sparse = [i for (i, x) in enumerate(Hgen[0][0:N]) if x != 0]
@@ -626,28 +711,24 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
             {"status": FlipStatus.UNFLIPPED, "result": IfFlipResult.UNKNOWN}
             for _ in range(N1)
         ]
-        R = 0
-        checks = []
-        while True:
-            # Select outer blocks that: if flipped back results in decoding success.
-            ret = next_failure_block(rng, HQC, priv, pt, ct, block_status)
-            if ret is None:
-                # restart with an new plaintext
-                continue
-            (current_block, ct) = ret
-            current_block_status = block_status[current_block]
-
-            # for each such block find bits that: if flipped back, results in decoding success
-            bit_status = [
-                {"status": FlipStatus.UNFLIPPED, "result": IfFlipResult.UNKNOWN}
-                for _ in range(N2)
-            ]
-            current_block_status["bits"] = bit_status
-
+        try:
             while True:
-                ret = next_failure_bit(
-                    rng, HQC, priv, pt, ct, bit_status, current_block
-                )
+                # Select outer blocks that: if flipped back results in decoding success.
+                ret = next_failure_block(rng, HQC, priv, pt, ct, block_status)
+                if ret is None:
+                    # restart with an new plaintext
+                    raise NoMoreUntestedRmBlocks
+                (current_block, ct) = ret
+                current_block_status = block_status[current_block]
+
+                # for each such block find bits that: if flipped back, results in decoding success
+                bit_status = [
+                    {"status": FlipStatus.UNFLIPPED, "result": IfFlipResult.UNKNOWN}
+                    for _ in range(N2)
+                ]
+                current_block_status["bits"] = bit_status
+
+                ret = next_failure_bit(rng, HQC, priv, pt, ct, bit_status, current_block)
                 if ret is None:
                     # No more bits to flip in this block
                     current_block_status["status"] = FlipStatus.UNFLIPPED
@@ -656,77 +737,71 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
                     break
 
                 (_, _, ct) = ret
-                while True:
 
-                    (successes, ct) = find_minimal_failure_flips(
-                        rng, HQC, priv, pt, ct, bit_status, current_block
-                    )
-                    (successes, ct) = find_minimal_failure_flips(
-                        rng,
-                        HQC,
-                        priv,
-                        pt,
-                        ct,
-                        bit_status,
-                        current_block,
-                        save_results=True,
-                    )
+                # Find minimal bit pattern for decoding failure in this inner RM block
+                (successes, ct) = find_minimal_failure_flips(
+                    rng,
+                    HQC,
+                    priv,
+                    pt,
+                    ct,
+                    bit_status,
+                    current_block,
+                    save_results=True,
+                )
 
-                    for s in successes:
-                        bit_n = current_block * N2 + s
-                        # Add row from Hgen to H, to correspond to the parity check equation
-                        # given by the current bit
-                        H = add_check(
-                            H,
-                            Hgen,
-                            y_times_r1,
-                            bit_n,
-                            checks,
-                            0,
-                        )
-                        R = len(checks)
+                # Add the bits that we have decided
+                ret = add_checks(
+                    0,
+                    successes,
+                    H,
+                    Hgen,
+                    current_block,
+                    checks,
+                    y_sparse,
+                    y_times_r1,
+                    N,
+                    N2,
+                    decode_every,
+                )
+                # first check for abort condition
+                if isinstance(ret, bool):
+                    return ret
+                # else extract return values
+                (H, checks) = ret
 
-                        if R % decode_every == 0 and R != 0:
-                            unsatisfied = checks.count(1)
-                            logger.info(
-                                f"{num_decodes} decapsulation calls performed so-far, "
-                                f"{unsatisfied} unsatisfied checks, out of total {len(checks)}."
-                            )
-                            if decode(H, N, checks, y_sparse):
-                                logger.info(f"Successfully decoded y")
-                                return
+                # Use the minimal failure pattern to decide which bits are '1' in r1*y
+                (successes, failures) = find_successes_by_flipping(
+                    rng, HQC, priv, pt, ct, bit_status, current_block
+                )
 
-                    successes = find_successes_by_flipping(
-                        rng, HQC, priv, pt, ct, bit_status, current_block
-                    )
+                # add these bits
+                ret = add_checks(
+                    1,
+                    successes,
+                    H,
+                    Hgen,
+                    current_block,
+                    checks,
+                    y_sparse,
+                    y_times_r1,
+                    N,
+                    N2,
+                    decode_every,
+                )
+                # first check for abort condition
+                if isinstance(ret, bool):
+                    return ret
+                # else extract return values
+                (H, checks) = ret
 
-                    for s in successes:
-                        bit_n = current_block * N2 + s
-                        # Add row from Hgen to H, to correspond to the parity check equation
-                        # given by the current bit
-                        H = add_check(
-                            H,
-                            Hgen,
-                            y_times_r1,
-                            bit_n,
-                            checks,
-                            1,
-                        )
-                        R = len(checks)
+                ct = reset_current_block(HQC, ct, current_block, bit_status)
 
-                        if R % decode_every == 0 and R != 0:
-                            unsatisfied = checks.count(1)
-                            logger.info(
-                                f"{num_decodes} decapsulation calls performed so-far, "
-                                f"{unsatisfied} unsatisfied checks, out of total {len(checks)}."
-                            )
-                            if decode(H, N, checks, y_sparse):
-                                logger.info(f"Successfully decoded y")
-                                return
-                    sys.exit(1)
-
-            # Reset all full-block flips that provide no information
-            ct = reset_full_block_flips(HQC, ct, block_status)
+                # Reset all full-block flips that provide no information
+                ct = reset_full_block_flips(HQC, ct, block_status)
+        except NoMoreUntestedRmBlocks:
+            # Continue with another ciphertext
+            continue
 
     # miss-classification probabilities are derived from "idealized-oracle" calls in CHES2022 paper.
 

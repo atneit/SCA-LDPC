@@ -46,7 +46,8 @@
             "justMyCode": true,
             "args": [
                 "hqc_simulate",
-                "--verbose"
+                //"--verbose",
+                "--decode-every 100"
             ]
         }
     ]

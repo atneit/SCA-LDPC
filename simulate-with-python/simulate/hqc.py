@@ -503,16 +503,18 @@ always_correct_neighbours = None
 
 def add_check(H, Hgen, r1_y_sparse, bit_n, checks, check):
     row = Hgen[bit_n]
-    (sum, sumpos) = cheating_sum_checks(row, r1_y_sparse)
-    logger.debug(f"check: {check}, sum: {sum}")
-    if check == sum % 2:
-        logger.debug(f"Adding row to H")
+    
+    bit_set = bit_n in r1_y_sparse
+    logger.debug(f"check: {check}, bit_set: {bit_set}")
+
+    if check == bit_set:
+        logger.info(f"Adding row to H")
         H = np.vstack([H, row]) if H is not None else Hgen[bit_n]
         checks.append(check)
     else:
         global always_correct_neighbours
         neighbors = {
-            i: cheating_sum_checks(Hgen[bit_n + i], r1_y_sparse)[0]
+            i: (bit_n + i) in r1_y_sparse
             for i in range(-64, 64)
             if i != 0 and i + bit_n >= 0 and i + bit_n < len(row)
         }

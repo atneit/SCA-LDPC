@@ -45,6 +45,45 @@ def flatten_matrix_parts(parts: np.ndarray):
     return np.concatenate(parts, axis=1)
 
 
+def circular_qary_parity_check_block(
+    block_len: int, column_weight: int, rng: np.random.RandomState
+):
+    block = np.zeros((block_len, block_len), dtype=np.int8)
+    nonzero_idx = set()
+    while len(nonzero_idx) < column_weight:
+        i = rng.randint(0, block_len - 1)
+        if i not in nonzero_idx:
+            nonzero_idx.add(i)
+    nonzero_idx = list(nonzero_idx)
+    nonzero_val = list((1 if i == 0 else -1) for i in nonzero_idx)
+    for i in range(block_len):
+        for j in range(column_weight):
+            block[i, nonzero_idx[j]] = nonzero_val[j] 
+            nonzero_idx[j] += 1
+            if nonzero_idx[j] == block_len:
+                nonzero_idx[j] = 0
+                nonzero_val[j] = -nonzero_val[j]
+    return block
+        
+
+
+def make_qary_qc_parity_check_matrix(
+    block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
+):
+
+    # construct the cyclic blocks
+    parts = [
+        circular_qary_parity_check_block(block_len, column_weight, rng)
+        for _ in range(num_blocks)
+    ]
+
+    # Add identity block
+    parts.append(np.identity(block_len, dtype=int))
+
+    # Flatten into one big matrix
+    return flatten_matrix_parts(parts)
+
+
 def make_qc_parity_check_matrix(
     block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
 ):

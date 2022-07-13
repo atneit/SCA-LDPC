@@ -31,7 +31,7 @@ macro_rules! register_py_decoder_class {
         #[pymethods]
         impl $Name {
             #[new]
-            fn new(py_parity_check: PyReadonlyArray2<bool>, iterations: u32) -> Result<Self> {
+            fn new(py_parity_check: PyReadonlyArray2<i8>, iterations: u32) -> Result<Self> {
                 let py_parity_check = py_parity_check.as_array();
                 ::log::info!(
                     "Constructing decoder {} with N={N}, R={R}, DV={DV}, DC={DC}, GF={GF}, Input parity check matrix has the shape: {shape:?}",
@@ -43,7 +43,7 @@ macro_rules! register_py_decoder_class {
                     GF = stringify!($GF),
                     shape = py_parity_check.shape()
                 );
-                let mut parity_check = [[false; $N]; $R];
+                let mut parity_check = [[0; $N]; $R];
                 for row in 0..parity_check.len() {
                     for col in 0..parity_check[row].len() {
                         parity_check[row][col] = py_parity_check[(row, col)];
@@ -104,6 +104,17 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
             DV: 7,
             DC: 3,
             B: 7
+        }
+    );
+
+    // Kyber first 256 coefficients
+    register_py_decoder_class!(
+        m <= DecoderN512R256V3C2B4 {
+            N: 512,
+            R: 256,
+            DV: 3,
+            DC: 2,
+            B: 4
         }
     );
 

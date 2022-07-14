@@ -118,6 +118,28 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
         }
     );
 
+    // Full Kyber-768
+    register_py_decoder_class!(
+        m <= DecoderN1024R256V7C2B12 {
+            N: 1024,
+            R: 256,
+            DV: 7,
+            DC: 2,
+            B: 12
+        }
+    );
+
+    // Full Kyber-768
+    register_py_decoder_class!(
+        m <= DecoderN1024R256V4C2B6 {
+            N: 1024,
+            R: 256,
+            DV: 4,
+            DC: 2,
+            B: 6
+        }
+    );
+
     debug!("Rust package simulate_rs imported!");
     Ok(())
 }

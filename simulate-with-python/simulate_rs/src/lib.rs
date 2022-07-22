@@ -7,6 +7,77 @@ use pyo3::{pyclass, pymethods, pymodule, types::PyModule, PyResult, Python};
 
 mod decoder;
 pub use decoder::{Decoder, FloatType};
+mod decoder_special;
+pub use decoder_special::{DecoderSpecial};
+
+
+macro_rules! register_py_decoder_special_class {
+    ($m:ident <= $Name:ident{N: $N:literal, R: $R:literal, DV: $DV:literal, DC: $DC:literal, B: $B:literal, BSUM: $BSUM:literal}) => {{
+        type CustomDecoder = DecoderSpecial<$N, $R, {$N-$R}, {$DC-1}, $DC, $DV, $B, {$B * 2 + 1}, $BSUM, {$BSUM * 2 + 1}, i8>;
+
+        #[pyclass]
+        struct $Name {
+            decoder: CustomDecoder,
+        }
+
+        #[pymethods]
+        impl $Name {
+            #[new]
+            fn new(py_parity_check: PyReadonlyArray2<i8>, iterations: u32) -> Result<Self> {
+                let py_parity_check = py_parity_check.as_array();
+                ::log::info!(
+                    "Constructing decoder {} with N={N}, R={R}, DV={DV}, DC={DC}, BSUM={BSUM}, Input parity check matrix has the shape: {shape:?}",
+                    stringify!($Name),
+                    N = $N,
+                    R = $R,
+                    DV = $DV,
+                    DC = $DC,
+                    BSUM = $BSUM,
+                    shape = py_parity_check.shape()
+                );
+                let mut parity_check = [[0; $N]; $R];
+                for row in 0..parity_check.len() {
+                    for col in 0..parity_check[row].len() {
+                        parity_check[row][col] = py_parity_check[(row, col)];
+                    }
+                }
+                Ok($Name {
+                    decoder: DecoderSpecial::new(parity_check, iterations),
+                })
+            }
+
+            /// min_sum algorithm
+            ///
+            /// This method is parallelizable from python.
+            ///
+            /// Attempts have  been made to make this function parallel from within,
+            /// but that resulted in performance loss
+            fn min_sum(&self, py: Python<'_>, py_channel_output: PyReadonlyArray2<FloatType>, py_channel_output_sum: PyReadonlyArray2<FloatType>) -> Result<[i8; $N]> {
+                let py_channel_output = py_channel_output.as_array();
+                let py_channel_output_sum = py_channel_output_sum.as_array();
+                py.allow_threads(||{
+                    let mut channel_output = [[0.0; {$B * 2 + 1}]; {$N-$R}];
+                    let mut channel_output_sum = [[0.0; {$BSUM * 2 + 1}]; $R];
+                    for variable in 0..channel_output.len() {
+                        for value in 0..channel_output[variable].len() {
+                            channel_output[variable][value] = py_channel_output[(variable, value)].into();
+                        }
+                    }
+                    for variable in 0..channel_output_sum.len() {
+                        for value in 0..channel_output_sum[variable].len() {
+                            channel_output_sum[variable][value] = py_channel_output_sum[(variable, value)].into();
+                        }
+                    }
+                    let channel_llr = CustomDecoder::into_llr(&channel_output);
+                    let channel_llr_sum = CustomDecoder::into_llr(&channel_output_sum);
+                    self.decoder.min_sum(channel_llr, channel_llr_sum)
+                })
+            }
+        }
+
+        $m.add_class::<$Name>()?;
+    }};
+}
 
 /// Use this macro to create new decoders for different sizes/parameters
 ///
@@ -21,7 +92,7 @@ pub use decoder::{Decoder, FloatType};
 /// });
 macro_rules! register_py_decoder_class {
     ($m:ident <= $Name:ident{N: $N:literal, R: $R:literal, DV: $DV:literal, DC: $DC:literal, B: $B:literal}) => {{
-        type CustomDecoder = Decoder<$N, $R, $DV, $DC, {$B * 2 + 1}, $B, i8>;
+        type CustomDecoder = Decoder<$N, $R, $DC, $DV, {$B * 2 + 1}, $B, i8>;
 
         #[pyclass]
         struct $Name {
@@ -87,56 +158,83 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     // Create a tiny toy example
     register_py_decoder_class!(
-        m <= DecoderN6R3V4C3GF16 {
+        m <= DecoderN6R3V3C4GF16 {
             N: 6,
             R: 3,
-            DV: 4,
-            DC: 3,
+            DV: 3,
+            DC: 4,
             B: 7
         }
     );
 
     // A slightly larger decoder for testing
     register_py_decoder_class!(
-        m <= DecoderN450R150V7C3GF16 {
+        m <= DecoderN450R150V3C7GF16 {
             N: 450,
             R: 150,
-            DV: 7,
-            DC: 3,
+            DV: 3,
+            DC: 7,
             B: 7
         }
     );
 
-    // Kyber first 256 coefficients
-    register_py_decoder_class!(
-        m <= DecoderN512R256V3C2B4 {
+    // Kyber block of 256 coefficients
+    register_py_decoder_special_class!(
+        m <= DecoderN512R256V2C3B4 {
             N: 512,
             R: 256,
-            DV: 3,
-            DC: 2,
-            B: 4
+            DV: 2,
+            DC: 3,
+            B: 2,
+            BSUM: 4
         }
     );
 
-    // Full Kyber-768
-    register_py_decoder_class!(
-        m <= DecoderN1024R256V7C2B12 {
+    // Full Kyber-768, sum_weight = 3
+    register_py_decoder_special_class!(
+        m <= DecoderN1024R256SW3 {
             N: 1024,
             R: 256,
-            DV: 7,
-            DC: 2,
-            B: 12
+            DV: 1,
+            DC: 4,
+            B: 2,
+            BSUM: 6
         }
     );
 
-    // Full Kyber-768
-    register_py_decoder_class!(
-        m <= DecoderN1024R256V4C2B6 {
+    // Full Kyber-768, sum_weight = 6
+    register_py_decoder_special_class!(
+        m <= DecoderN1024R256SW6 {
+            N: 1024,
+            R: 256,
+            DV: 2,
+            DC: 7,
+            B: 2,
+            BSUM: 12
+        }
+    );
+
+    // Full Kyber-768, sum_weight = 9
+    register_py_decoder_special_class!(
+        m <= DecoderN1024R256SW9 {
+            N: 1024,
+            R: 256,
+            DV: 3,
+            DC: 10,
+            B: 2,
+            BSUM: 18
+        }
+    );
+
+    // Full Kyber-768, sum_weight = 12
+    register_py_decoder_special_class!(
+        m <= DecoderN1024R256V13C4B24 {
             N: 1024,
             R: 256,
             DV: 4,
-            DC: 2,
-            B: 6
+            DC: 13,
+            B: 2,
+            BSUM: 24
         }
     );
 

@@ -228,7 +228,7 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     // Full Kyber-768, sum_weight = 12
     register_py_decoder_special_class!(
-        m <= DecoderN1024R256V13C4B24 {
+        m <= DecoderN1024R256SW12 {
             N: 1024,
             R: 256,
             DV: 4,

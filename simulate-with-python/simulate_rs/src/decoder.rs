@@ -159,6 +159,47 @@ impl<const Q: usize> QaryLlrs<Q> {
         }
         ret
     }
+
+    // assume hij is 1 or -1, after multiplication array is the same (hij==1) or reversed
+    fn mult_in_gf(&self, hij: i8) -> Self {
+        let mut ret = Self(self.0);
+        if hij < 0 {
+            for q in 0..Q {
+                ret.0[q] = self.0[Q - q - 1];
+            }
+        }
+        ret
+    }
+
+    // q-ary'ily Add self with term multiplied by hij
+    fn qary_add_with_mult_in_gf(&self, term: Self, hij: i8) -> Self {
+        let mut ret = Self([FloatType::INFINITY; Q]);
+        if hij > 0 {
+            for q in 0..Q {
+                ret.0[q] = self.0[q] + term.0[q];
+            }
+        } else {
+            for q in 0..Q {
+                ret.0[q] = self.0[q] + term.0[Q - q - 1];
+            }
+        }
+        ret
+    }
+
+    // q-ary'ily Subtract self with term multiplied by hij
+    fn qary_sub_with_mult_in_gf(&self, subtrahend: Self, hij: i8) -> Self {
+        let mut ret = Self([FloatType::INFINITY; Q]);
+        if hij > 0 {
+            for q in 0..Q {
+                ret.0[q] = self.0[q] - subtrahend.0[q];
+            }
+        } else {
+            for q in 0..Q {
+                ret.0[q] = self.0[q] - subtrahend.0[Q - q - 1];
+            }
+        }
+        ret
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -362,7 +403,7 @@ where
 type Container2D<T> = rustc_hash::FxHashMap<Key2D, T>;
 //type Container2D<T> = HashMap<Key2D, T>;
 
-type ParCheckType = bool;
+type ParCheckType = i8;
 
 /// Decoder that implements min_sum algorithm.
 ///
@@ -472,7 +513,7 @@ where
                 IntoIterator::into_iter(row)
                     .enumerate()
                     // Filter out zeroes in the parity check
-                    .filter(|(col_num, h)| *h)
+                    .filter(|(col_num, h)| *h != 0)
                     // Handle the non-zeroes
                     .map(move |(col_num, h)| {
                         let ij: Key2D = (row_num, col_num).into();
@@ -526,8 +567,8 @@ where
         for (var_idx, (v, m)) in (0..).zip(vn.iter_mut().zip(channel_llr)) {
             v.channel = Some(m);
             for key in v.checks(var_idx) {
-                // We assume that only ones are present in the parity check matrix
-                debug_unwrap!(edges.get_mut(&key)).v2c.insert(m);
+                // We assume that only plus or minus ones are present in the parity check matrix
+                debug_unwrap!(edges.get_mut(&key)).v2c.insert(m.mult_in_gf(self.parity_check[&key]));
             }
         }
 
@@ -597,13 +638,13 @@ where
                 let mut sum: QaryLlrs<Q> = debug_unwrap!(var.channel);
                 for key in var.checks(var_idx) {
                     let incoming = debug_unwrap!(debug_unwrap!(edges.get(&key)).c2v);
-                    sum = sum.qary_add(incoming)
+                    sum = sum.qary_add_with_mult_in_gf(incoming, self.parity_check[&key]);
                 }
                 for key in var.checks(var_idx) {
                     // 4.2 primitive outgoing messages, subtract self for individual message
                     let edge = debug_unwrap!(edges.get_mut(&key));
                     let incoming = debug_unwrap!(edge.c2v);
-                    let prim_out = sum.qary_sub(incoming);
+                    let prim_out = sum.qary_sub_with_mult_in_gf(incoming, self.parity_check[&key]).mult_in_gf(self.parity_check[&key]);
                     // 5. Message normalization
                     let arg_min = Self::arg_min(prim_out);
                     let out = prim_out.qary_sub_arg(arg_min);
@@ -730,9 +771,9 @@ mod tests {
     fn small_decoder_instance() {
         let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new(
             [
-                [true, true, true, true, false, false],
-                [false, false, true, true, false, true],
-                [true, false, false, true, true, false],
+                [1, 1, 1, 1, 0, 0],
+                [0, 0, 1, 1, 0, 1],
+                [1, 0, 0, 1, 1, 0],
             ],
             10,
         );
@@ -757,17 +798,17 @@ mod tests {
         assert_eq!(res, expected);
     }
 
-    fn h_from_file<P, const N: usize, const R: usize>(path: P) -> Result<[[bool; N]; R]>
+    fn h_from_file<P, const N: usize, const R: usize>(path: P) -> Result<[[i8; N]; R]>
     where
         P: AsRef<Path>,
     {
-        let mut ret = [[false; N]; R];
+        let mut ret = [[0; N]; R];
         let file = File::open(path.as_ref())?;
         let reader = BufReader::new(file);
         for (row, line) in reader.lines().enumerate() {
             for (column, value) in line?.split_whitespace().enumerate() {
-                let int: u8 = value.parse()?;
-                ret[row][column] = int != 0;
+                let int: i8 = value.parse()?;
+                ret[row][column] = int;
             }
         }
  

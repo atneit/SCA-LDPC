@@ -109,7 +109,7 @@ def make_regular_ldpc_parity_check_matrix(
 
     if r != (k * column_weight) // row_weight:
         raise ValueError(
-            """r must follow (k * column_weight) // row_weight for the parity check matrix to be regular"""
+            """r must follow '(k * column_weight) // row_weight' for the parity check matrix to be regular"""
         )
 
     # with np.printoptions(threshold=sys.maxsize):

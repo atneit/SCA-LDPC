@@ -4,12 +4,24 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-    {
-        "type": "lldb",
-        "request": "attach",
-        "name": "Attach to PID",
-        "pid": "${command:pickMyProcess}" // use ${command:pickProcess} to pick other users' processes
-    },
+        {
+            "name": "Remote attach",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/python-virtualenv/bin/python",
+            "miDebuggerServerAddress": "compiler3:1234",
+            "cwd": "${workspaceRoot}",
+            "externalConsole": true,
+            "linux": {
+                "MIMode": "gdb"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "attach",
+            "name": "Attach to PID",
+            "pid": "${command:pickMyProcess}" // use ${command:pickProcess} to pick other users' processes
+        },
         {
             "name": "Python: HQC",
             "type": "python",
@@ -48,6 +60,17 @@
                 "hqc_simulate",
                 //"--verbose",
                 "--decode-every 100"
+            ]
+        },
+        {
+            "name": "main.py test_rust_package",
+            "type": "python",
+            "request": "launch",
+            "program": "simulate-with-python/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "test_rust_package",
             ]
         }
     ]

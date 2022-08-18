@@ -639,8 +639,8 @@ where
                 .expect("No maximum probability found");
             // Ensure the probabilities sum to 1.0, taking into
             // account the problem of floating point comparisons
-            assert!(sum < 1.0 + EPSILON);
-            assert!(sum > 1.0 - EPSILON);
+            assert!(sum < 1.0 + EPSILON, "{} < 1.0 - EPSILON", sum);
+            assert!(sum > 1.0 - EPSILON, "{} > 1.0 - EPSILON", sum);
             // calculate LLR
             for (ent, dst) in var.iter().zip(msg.0.iter_mut()) {
                 *dst = (max / ent).ln();

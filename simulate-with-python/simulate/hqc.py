@@ -10,10 +10,8 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = "simulate"
 
 from collections import Counter
-import sys
-import types
 from typing import Union
-
+import pickle
 import itertools
 import numpy as np
 from .make_code import make_random_ldpc_parity_check_matrix
@@ -789,11 +787,33 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
                     N2,
                     decode_every,
                 )
+
+                # # add these bits
+                # ret = add_checks(
+                #     0,
+                #     failures,
+                #     H,
+                #     Hgen,
+                #     current_block,
+                #     checks,
+                #     y_sparse,
+                #     y_times_r1,
+                #     N,
+                #     N2,
+                #     decode_every,
+                # )
                 # first check for abort condition
                 if isinstance(ret, bool):
                     return ret
                 # else extract return values
                 (H, checks) = ret
+
+
+                ## Find maximum successfull pattern, start from minimal 
+                ## failure pattern, with one bit flipped which we know is a success
+                
+
+                ## flip bits in pattern to recover '1's
 
                 ct = reset_current_block(HQC, ct, current_block, bit_status)
 
@@ -845,7 +865,14 @@ def test_hqc_encaps_with_plaintext_and_r1(seed):
     """
     HQC = Hqc128()
     N = HQC.params("N")
-    (pub, priv) = HQC.keypair()  # Randomness does not depend on rng
+    try:
+        with open("test-hqc.key", "rb") as file:
+            contents = pickle.load(file)
+    except Exception as e:
+        with open("test-hqc.key", "wb") as file:
+            contents = HQC.keypair()  # Randomness does not depend on rng
+            pickle.dump(contents, file)
+    (pub, priv) = contents
     rng = make_random_state(seed)
     pt = search_distinguishable_plaintext(HQC, rng)
     for j in rng.choice(N, 100, replace=False):

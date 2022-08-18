@@ -24,7 +24,7 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     // Create a tiny toy example
     register_py_decoder_class!(
-        m <= DecoderN6R3V4C3GF16 {
+        m <= DecoderN6R3V4C3B7 {
             N: 6,
             R: 3,
             DV: 4,
@@ -35,7 +35,7 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     // A slightly larger decoder for testing
     register_py_decoder_class!(
-        m <= DecoderN450R150V7C3GF16 {
+        m <= DecoderN450R150V7C3B7 {
             N: 450,
             R: 150,
             DV: 7,

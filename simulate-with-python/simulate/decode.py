@@ -187,20 +187,21 @@ def simulate_frame_error_rate_rust(
     """
     This function simulates an all-zero codeword with some noisy symbols
     """
-    from simulate_rs import DecoderN450R150V7C3GF16
+    from simulate_rs import DecoderN450R150V7C3B7
     from concurrent.futures import (
         ThreadPoolExecutor,
         as_completed,
     )
 
     n = H.shape[1]
-    q = 16
-    channel_output = np.zeros((n, q)).astype(np.float32)  # error vector
+    b = 7
+    qq = b * 2 + 1
+    channel_output = np.zeros((n, qq)).astype(np.float32)  # error vector
 
-    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"), 5)
+    decoder = DecoderN450R150V7C3B7(H.astype("bool"), 5)
 
-    p_linear = 1 / q
-    channel_prob = [p_linear for x in range(0, q)]
+    p_linear = 1 / qq
+    channel_prob = [p_linear for x in range(0, qq)]
     good_variable = np.array(channel_prob)
     bad_variable = np.array(channel_prob)
     good_variable[[0, 1]] = np.array([2 * p_linear, 0])

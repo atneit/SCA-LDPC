@@ -58,8 +58,11 @@
             "justMyCode": true,
             "args": [
                 "hqc_simulate",
-                //"--verbose",
-                "--decode-every 100"
+                "--verbose",
+                "--decode-every",
+                "100",
+                "--key-file",
+                "test-hqc.key"
             ]
         },
         {

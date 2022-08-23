@@ -87,6 +87,12 @@ class Commands(CommandsBase):
             help="Input file specifying distribution of the error for different positions.",
         )
         error_group.add_argument(
+            "--key-file",
+            action="store",
+            type=str,
+            help="Serialzied key location. If it does not exist it will be created and filled with a random key (independent of --seed argument).",
+        )
+        error_group.add_argument(
             "--threads",
             action="store",
             type=int,
@@ -96,7 +102,7 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        simulate_hqc_idealized_oracle(rng, args.decode_every)
+        simulate_hqc_idealized_oracle(rng, args.decode_every, args.key_file)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

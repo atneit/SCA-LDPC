@@ -45,8 +45,32 @@ class IfFlipResult(Enum):
     SUCCESS = 2
     FAILURE = 3
 
+
 class NoMoreUntestedRmBlocks(Exception):
     pass
+
+
+def read_or_generate_keypair(HQC, filename=None):
+    if filename:
+        try:
+            with open(filename, "rb") as file:
+                key = pickle.load(file)
+                logger.info(f"Loaded existing key from {filename}")
+        except Exception as e:
+            with open(filename, "wb") as file:
+                logger.info(
+                    f"Creating random HQC keypair in {filename} (randomness does not depend on provided seed)!"
+                )
+                key = HQC.keypair()  # Randomness does not depend on rng
+                pickle.dump(key, file)
+                logger.debug(f"new key saved in {filename}")
+    else:
+        logger.info(
+            "Generating random HQC keypair (randomness does not depend on provided seed)!"
+        )
+        key = HQC.keypair()  # Randomness does not depend on rng
+    return key
+
 
 def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
     """
@@ -427,12 +451,14 @@ def decode(Hin: np.array, N: int, checks: list, y_sparse):
 
     H = np.concatenate((Hin, np.identity(R, dtype=int)), axis=1, dtype=int)
     logger.debug(f"decode, N: {N}, R: {R}, Hin: {Hin.shape}, H: {H.shape}")
+    logger.debug(f"H: \n{H}")
 
     # Create empty "message" to be decoded
     assumed_zero = np.full(N, 0.00371, dtype=np.float64)
     # failed_checks = np.full(R, 0.9942, dtype=np.float64)
     check_part = np.full(R, 0.0, dtype=np.float64)
     channel_probs = np.concatenate((assumed_zero, check_part))
+    logger.debug(f"channel_probs: {channel_probs}")
 
     # Creating the decoder
     bpd = bp_decoder(
@@ -445,6 +471,7 @@ def decode(Hin: np.array, N: int, checks: list, y_sparse):
     logger.info(f"Attempting decode with {R} checks.")
 
     msg = np.concatenate((np.zeros(N, dtype=int), np.array(checks, dtype=int)))
+    logger.debug(f"msg: {msg}")
 
     decoded = bpd.decode(msg)
     decoded_msg_sparse = []
@@ -563,7 +590,7 @@ def add_check(H, Hgen, r1_y_sparse, bit_n, checks, check):
 
         if check != bit_set:
             add = False
-            logger.warn(
+            logger.warning(
                 f"Ignored false result for bit {bit_n}, check: {check}, bit value: {bit_set}!"
             )
     if add:
@@ -628,6 +655,7 @@ def add_checks(
     N2,
     decode_every,
 ):
+    previous_decoding = 0
     for b in bits:
         bit_n = current_block * N2 + b
         # Add row from Hgen to H, to correspond to the parity check equation
@@ -642,7 +670,9 @@ def add_checks(
         )
         R = len(checks)
 
-        if R % decode_every == 0 and R != 0:
+        if R % decode_every == 0 and R != 0 and previous_decoding != R:
+            # this prevents decoding again if R doesn't change
+            previous_decoding = R
             unsatisfied = checks.count(1)
             logger.info(
                 f"{num_decodes} decapsulation calls performed so-far, "
@@ -655,7 +685,9 @@ def add_checks(
     return (H, checks)
 
 
-def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int):
+def simulate_hqc_idealized_oracle(
+    rng: np.random.RandomState, decode_every: int, keyfile=None
+):
     """
     Main function for simulating HQC attack
     """
@@ -675,13 +707,11 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
     logger.info(f"Params N: {N}, N1: {N1}, N2: {N2}, weight: {weight}")
 
     # construct/load key-pair to crack
-    logger.info(
-        "Creating random HQC keypair (randomness does not depend on provided seed)!"
-    )
-    (pub, priv) = HQC.keypair()  # Randomness does not depend on 'rng'
+    (pub, priv) = read_or_generate_keypair(HQC, keyfile)
     (_, y_sparse) = HQC.secrets_from_key(priv)
 
-    logger.info(f"y: {sorted(y_sparse)}")
+    y_sparse = sorted(y_sparse)
+    logger.info(f"y weight: {len(y_sparse)}, y bits: {y_sparse}")
 
     # Keep trying new plain texts, until we manage to decode and find y
     while True:
@@ -726,7 +756,9 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
                 ]
                 current_block_status["bits"] = bit_status
 
-                ret = next_failure_bit(rng, HQC, priv, pt, ct, bit_status, current_block)
+                ret = next_failure_bit(
+                    rng, HQC, priv, pt, ct, bit_status, current_block
+                )
                 if ret is None:
                     # No more bits to flip in this block
                     current_block_status["status"] = FlipStatus.UNFLIPPED
@@ -808,10 +840,8 @@ def simulate_hqc_idealized_oracle(rng: np.random.RandomState, decode_every: int)
                 # else extract return values
                 (H, checks) = ret
 
-
-                ## Find maximum successfull pattern, start from minimal 
+                ## Find maximum successfull pattern, start from minimal
                 ## failure pattern, with one bit flipped which we know is a success
-                
 
                 ## flip bits in pattern to recover '1's
 
@@ -865,14 +895,7 @@ def test_hqc_encaps_with_plaintext_and_r1(seed):
     """
     HQC = Hqc128()
     N = HQC.params("N")
-    try:
-        with open("test-hqc.key", "rb") as file:
-            contents = pickle.load(file)
-    except Exception as e:
-        with open("test-hqc.key", "wb") as file:
-            contents = HQC.keypair()  # Randomness does not depend on rng
-            pickle.dump(contents, file)
-    (pub, priv) = contents
+    (pub, priv) = read_or_generate_keypair(HQC, "test-hqc.key")
     rng = make_random_state(seed)
     pt = search_distinguishable_plaintext(HQC, rng)
     for j in rng.choice(N, 100, replace=False):
@@ -890,10 +913,61 @@ def test_hqc_encaps_with_plaintext_and_r1(seed):
     return True
 
 
+def test_hqc_decode_toy_example(seed):
+    """
+    This is a unit test.
+
+    We use doctest for test discovery:
+    >>> test_hqc_decode_toy_example(0)
+    True
+    """
+
+    rng = make_random_state(seed)
+    weight = 3
+    logger.debug(f"weight: {weight}")
+    N = 20  # TODO
+    logger.debug(f"N: {N}")
+    y_sparse = [4, 14]  # TODO
+    logger.debug(f"y_sparse: {y_sparse}")
+
+    Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
+    logger.debug(f"Hgen: \n{Hgen}")
+
+    r1_sparse = [i for (i, x) in enumerate(Hgen[0][0:N]) if x != 0]
+    assert weight == len(r1_sparse)
+    logger.debug(f"r1_sparse: {r1_sparse}")
+
+    y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, N)
+    logger.debug(f"y_times_r1: {y_times_r1}")
+
+    checks = []
+    check_values = [(i, i in y_times_r1) for i in range(N)]  # TODO
+    logger.debug(f"check_values: {check_values}")
+
+    H = None
+    for (bit_n, check_value) in check_values:
+        H = add_check(
+            H,
+            Hgen,
+            y_times_r1,
+            bit_n,
+            checks,
+            check_value,
+        )
+
+    logger.debug(f"checks: {checks}")
+    logger.debug(f"H: \n{H}")
+    return decode(H, N, checks, y_sparse)
+
+
 if __name__ == "__main__":
-    for seed in range(0, 999999):
-        if test_hqc_encaps_with_plaintext_and_r1(seed):
-            print(f"Success {seed}!")
-        else:
-            print(f"Failure {seed}!")
-            break
+    import coloredlogs
+
+    coloredlogs.install(level="DEBUG")
+    for seed in range(0, 1):
+        print(
+            f"test_hqc_decode_toy_example({seed}): {'Success' if test_hqc_decode_toy_example(seed) else 'Failure'}!"
+        )
+        print(
+            f"test_hqc_encaps_with_plaintext_and_r1({seed}): {'Success' if test_hqc_encaps_with_plaintext_and_r1(seed) else 'Failure'}!"
+        )

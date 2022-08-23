@@ -47,7 +47,7 @@ fi
 
 echo -e "${COLOR}Building local rust package...${RESET}"
 pushd simulate_rs
-maturin develop
+maturin develop --release
 popd #simulate_rs
 
 popd #SCRIPT_DIR

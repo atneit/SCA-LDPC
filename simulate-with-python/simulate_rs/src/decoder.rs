@@ -417,8 +417,8 @@ type ParCheckType = i8;
 pub struct Decoder<
     const N: usize,
     const R: usize,
-    const DC: usize,
     const DV: usize,
+    const DC: usize,
     const Q: usize,
     const B: usize,
     BType: Integer + Signed,
@@ -475,12 +475,12 @@ fn insert_first_none<T, const E: usize>(array: &mut [Option<T>; E], value: T) {
 impl<
         const N: usize,
         const R: usize,
-        const DC: usize,
         const DV: usize,
+        const DC: usize,
         const Q: usize,
         const B: usize,
         BType,
-    > Decoder<N, R, DC, DV, Q, B, BType>
+    > Decoder<N, R, DV, DC, Q, B, BType>
 where
     BType: Integer + Signed + NumCast + AddAssign + Copy + FromPrimitive + TryInto<usize> + Default,
 {
@@ -738,7 +738,7 @@ mod tests {
     use std::{path::Path, io::{BufReader, BufRead}, fs::File};
     use super::*;
 
-    type MyTinyTestDecoder = Decoder<6, 3, 4, 3, 15, 7, i8>;
+    type MyTinyTestDecoder = Decoder<6, 3, 3, 4, 15, 7, i8>;
 
     #[test]
     fn into_llr() {
@@ -819,8 +819,8 @@ mod tests {
     fn medium_decoder_instance() {
         const N: usize = 450;
         const R: usize = 150;
-        const DV: usize = 7;
-        const DC: usize = 3;
+        const DV: usize = 3;
+        const DC: usize = 7;
         const B: usize = 7;
         const Q: usize = B * 2 + 1;
 

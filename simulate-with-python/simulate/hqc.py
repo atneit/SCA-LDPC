@@ -436,7 +436,7 @@ def find_successes_by_flipping(rng, HQC, priv, pt, ct, bit_status, block):
     return (successes, failures)
 
 
-def decode(Hin: np.array, N: int, checks: list, y_sparse):
+def decode(Hin: np.array, N: int, checks: list, y_sparse: list, measurment_failure_rate: float):
     """
     Uses parity check matrix 'H' to decodes the message
     [0_0, 0_1, 0_2, ..., 0_N | c_0, c_1, ..., c_R],
@@ -451,12 +451,13 @@ def decode(Hin: np.array, N: int, checks: list, y_sparse):
 
     H = np.concatenate((Hin, np.identity(R, dtype=int)), axis=1, dtype=int)
     logger.debug(f"decode, N: {N}, R: {R}, Hin: {Hin.shape}, H: {H.shape}")
-    logger.debug(f"H: \n{H}")
 
     # Create empty "message" to be decoded
-    assumed_zero = np.full(N, 0.00371, dtype=np.float64)
+    msg_weight = len(y_sparse)
+    prob_for_one = msg_weight / N
+    assumed_zero = np.full(N, prob_for_one, dtype=np.float64)
     # failed_checks = np.full(R, 0.9942, dtype=np.float64)
-    check_part = np.full(R, 0.0, dtype=np.float64)
+    check_part = np.full(R, measurment_failure_rate, dtype=np.float64)
     channel_probs = np.concatenate((assumed_zero, check_part))
     logger.debug(f"channel_probs: {channel_probs}")
 
@@ -678,7 +679,7 @@ def add_checks(
                 f"{num_decodes} decapsulation calls performed so-far, "
                 f"{unsatisfied} unsatisfied checks, out of total {len(checks)}."
             )
-            if decode(H, N, checks, y_sparse):
+            if decode(H, N, checks, y_sparse, 0):
                 logger.info(f"Successfully decoded y")
                 return True
 
@@ -723,7 +724,7 @@ def simulate_hqc_idealized_oracle(
         Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
 
         # encapsulate with r_2 and e to all-zero. Set r_1 to h_0
-        r1_sparse = [i for (i, x) in enumerate(Hgen[0][0:N]) if x != 0]
+        r1_sparse = [i for (i, x) in enumerate(Hgen[:,0]) if x != 0]
         assert weight == len(r1_sparse)
         logger.debug(f"r1_sparse: {r1_sparse}")
         (ct, ss) = HQC.encaps_with_plaintext_and_r1(pub, pt, r1_sparse)
@@ -927,13 +928,13 @@ def test_hqc_decode_toy_example(seed):
     logger.debug(f"weight: {weight}")
     N = 20  # TODO
     logger.debug(f"N: {N}")
-    y_sparse = [4, 14]  # TODO
+    y_sparse = [4, 5, 7, 9]  # TODO
     logger.debug(f"y_sparse: {y_sparse}")
 
     Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
     logger.debug(f"Hgen: \n{Hgen}")
 
-    r1_sparse = [i for (i, x) in enumerate(Hgen[0][0:N]) if x != 0]
+    r1_sparse = [i for (i, x) in enumerate(Hgen[:,0]) if x != 0]
     assert weight == len(r1_sparse)
     logger.debug(f"r1_sparse: {r1_sparse}")
 
@@ -946,28 +947,34 @@ def test_hqc_decode_toy_example(seed):
 
     H = None
     for (bit_n, check_value) in check_values:
-        H = add_check(
-            H,
-            Hgen,
-            y_times_r1,
-            bit_n,
-            checks,
-            check_value,
-        )
+        if check_value or True:
+            H = add_check(
+                H,
+                Hgen,
+                y_times_r1,
+                bit_n,
+                checks,
+                check_value,
+            )
+
+    from ldpc.code_util import get_code_parameters
+    code_params = get_code_parameters(Hgen)
+    logger.debug(f"code_params: \n{code_params}")
 
     logger.debug(f"checks: {checks}")
     logger.debug(f"H: \n{H}")
-    return decode(H, N, checks, y_sparse)
+    return decode(H, N, checks, y_sparse, 0.0)
 
 
 if __name__ == "__main__":
     import coloredlogs
 
-    coloredlogs.install(level="DEBUG")
-    for seed in range(0, 1):
-        print(
-            f"test_hqc_decode_toy_example({seed}): {'Success' if test_hqc_decode_toy_example(seed) else 'Failure'}!"
-        )
-        print(
-            f"test_hqc_encaps_with_plaintext_and_r1({seed}): {'Success' if test_hqc_encaps_with_plaintext_and_r1(seed) else 'Failure'}!"
-        )
+    #coloredlogs.install(level="DEBUG")
+    with np.printoptions(linewidth=99999):
+        for seed in range(0, 10):
+            print(
+                f"test_hqc_decode_toy_example({seed}): {'Success' if test_hqc_decode_toy_example(seed) else 'Failure'}!"
+            )
+            print(
+                f"test_hqc_encaps_with_plaintext_and_r1({seed}): {'Success' if test_hqc_encaps_with_plaintext_and_r1(seed) else 'Failure'}!"
+            )

@@ -36,6 +36,7 @@ macro_rules! register_py_hqc_class {
                     "N1N2" => Ok(params.PARAM_N1N2),
                     "SECURITY" => Ok(params.PARAM_SECURITY),
                     "DELTA" => Ok(params.PARAM_DELTA),
+                    "OMEGA" => Ok(params.PARAM_OMEGA),
                     _ => Err(anyhow!("No such param!")),
                 }
             }

@@ -102,7 +102,7 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        simulate_hqc_idealized_oracle(rng, args.decode_every, args.key_file)
+        simulate_hqc_idealized_oracle(rng, args.decode_every, 20, args.key_file)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

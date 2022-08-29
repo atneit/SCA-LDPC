@@ -1,3 +1,3 @@
 #!/bin/sh
 
-pip freeze | grep -v simulate-rs > requirements.txt
+pip freeze | grep -v simulate_rs > requirements.txt

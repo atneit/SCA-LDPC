@@ -8,3 +8,5 @@ perf.data
 perf.data.old
 *.log
 test-hqc.key
+*.png
+*.csv

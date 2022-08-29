@@ -21,6 +21,7 @@ from simulate_rs import Hqc128
 from enum import Enum
 import logging
 from ldpc import bp_decoder
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +170,9 @@ class HqcSimulationParams:
 
 class HqcSimulationTracking:
     def __init__(self, params: HqcSimulationParams):
-        num_decodes = 0
+        self.num_oracle_calls = 0
         self.params = params
+        self.decoder_stats =[]
 
     def reset_block_status(self):
         self.current_block_nr = None
@@ -196,6 +198,37 @@ class HqcSimulationTracking:
 
     def current_bits_status(self):
         return self.current_block()["bits"]
+
+    def add_decoder_stats(
+        self,
+        checks,
+        unsatisfied,
+        good_flips,
+        bad_flips,
+        found_bad_satisfied_checks,
+        found_bad_unsatisfied_checks,
+        success,
+    ):
+        self.decoder_stats.append({
+            "checks": checks,
+            "oracle_calls": self.num_oracle_calls,
+            "unsatisfied": unsatisfied,
+            "good_flips": good_flips,
+            "bad_flips": bad_flips,
+            "found_bad_satisfied_checks": found_bad_satisfied_checks,
+            "found_bad_unsatisfied_checks": found_bad_unsatisfied_checks,
+            "success": success
+        })
+
+    def decoder_stats_data_frame(self, label="", write_header=True):
+        static_columns = ["label","alg","weight","epsilon0", "epsilon1"]
+        static_values = [label, self.params.HQC.name(), self.params.WEIGHT, self.params.EPSILON[0], self.params.EPSILON[1]]
+        df = pd.DataFrame.from_dict(self.decoder_stats)
+        dynamic_columns = list(df.columns)
+        df[static_columns] = static_values
+        # Rearrange the columns
+        column_order = static_columns + dynamic_columns
+        return df[column_order]
 
 
 def next_failure_block(
@@ -269,7 +302,9 @@ def next_failure_block(
     return None
 
 
-def reset_full_block_flips(params: HqcSimulationParams, tracking: HqcSimulationTracking, ct):
+def reset_full_block_flips(
+    params: HqcSimulationParams, tracking: HqcSimulationTracking, ct
+):
     """
     Resets all fully flipped blocks where 'result' is IfFlipResult.UNKNOWN
     """
@@ -281,12 +316,16 @@ def reset_full_block_flips(params: HqcSimulationParams, tracking: HqcSimulationT
     return ct
 
 
-def reset_current_block(params: HqcSimulationParams, tracking: HqcSimulationTracking, ct):
+def reset_current_block(
+    params: HqcSimulationParams, tracking: HqcSimulationTracking, ct
+):
     """
     Resets all bits in the specified RM block where FlipStatus == FLIPPED
     """
     available_bits = [
-        i for (i, b) in (enumerate(tracking.current_bits_status())) if b["status"] == FlipStatus.FLIPPED
+        i
+        for (i, b) in (enumerate(tracking.current_bits_status()))
+        if b["status"] == FlipStatus.FLIPPED
     ]
     for bit in available_bits:
         ct = flip_single_bit(ct, tracking.current_block_nr, bit, params.N, params.N2)
@@ -602,17 +641,30 @@ def decode(
     decoded = bpd.decode(msg)
     decoded_msg_sparse = []
     decoded_checks_sparse = []
+    unsatisfied = 0
+    good_flips = 0
+    bad_flips = 0
+    found_bad_satisfied_checks = 0
+    found_bad_unsatisfied_checks = 0
 
     for (i, x) in enumerate(decoded[: params.N]):
         if x:
             s = str(i)
             if i in y_sparse:
+                good_flips += 1
                 s += "*"
+            else:
+                bad_flips += 1
             decoded_msg_sparse.append(s)
     for (i, (x, (c, _))) in enumerate(zip(decoded[params.N :], checks)):
-        if x != c:
-            s = str(params.N + i)
-            decoded_checks_sparse.append(s)
+        if c:
+            unsatisfied += 1
+            if not x:
+                decoded_checks_sparse.append(params.N + i)
+                found_bad_unsatisfied_checks += 1
+        elif x:
+            decoded_checks_sparse.append(params.N + i)
+            found_bad_satisfied_checks += 1
 
     logger.info(
         f"Decoded with {R} checks, made {len(decoded_msg_sparse)} "
@@ -626,10 +678,20 @@ def decode(
         if yi or yip:
             logger.debug(f"y'[{i}]: {yip}, y[{i}]: {yi}")
             unequal |= yi != yip
-    return not bool(unequal)
+
+    success = not bool(unequal)
+    tracking.add_decoder_stats(
+        R,
+        unsatisfied,
+        good_flips,
+        bad_flips,
+        found_bad_satisfied_checks,
+        found_bad_unsatisfied_checks,
+        success
+    )
+    return success
 
 
-num_decodes = 0
 saved_rm_enc = None
 saved_input_decoder = None
 
@@ -699,8 +761,7 @@ def hqc_decoding_oracle(
         logger.debug(f"Number of rejections for plaintext: {pt_prime_num_rejections}")
         logger.debug(f"RS encode: '{hex_rs_enc}'")
     else:
-        global num_decodes
-        num_decodes += 1
+        tracking.num_oracle_calls += 1
         if invert_result:
             logger.warning(
                 f"Inverting oracle decision (originally: {result}) due to specified epsilon value: {failure_rate}"
@@ -818,7 +879,7 @@ def add_checks(
             previous_decoding = R
             unsatisfied = sum(c for (c, p) in checks)
             logger.info(
-                f"{num_decodes} decapsulation calls performed so-far, "
+                f"{tracking.num_oracle_calls} decapsulation calls performed so-far, "
                 f"{unsatisfied} unsatisfied checks, out of total {len(checks)}."
             )
             if decode(params, tracking, H, checks, y_sparse):

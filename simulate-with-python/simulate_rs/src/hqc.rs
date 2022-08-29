@@ -16,6 +16,11 @@ macro_rules! register_py_hqc_class {
             }
 
             #[staticmethod]
+            fn name() -> &'static str {
+                HQC::NAME
+            }
+
+            #[staticmethod]
             fn keypair(py: Python<'_>) -> Result<(&PyBytes, &PyBytes)> {
                 let (public, secret) = HQC::keypair().map_err(anyhow::Error::msg)?;
 

@@ -63,7 +63,13 @@
                 "--decode-every",
                 "100",
                 "--key-file",
-                "test-hqc.key"
+                "test-hqc.key",
+                "--code-weight",
+                "50",
+                "--error-rate",
+                "0.005",
+                "--seed",
+                "0"
             ]
         },
         {

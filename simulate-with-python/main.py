@@ -124,7 +124,7 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        (_, tracking) = simulate_hqc_idealized_oracle(rng, args.decode_every, args.code_weight, args.key_file)
+        (_, tracking) = simulate_hqc_idealized_oracle(rng, args.decode_every, args.code_weight, args.key_file, args.error_rate)
         df = tracking.decoder_stats_data_frame(label=args.label)
         logger.info(f"Stats: \n{df.to_string(index=False)}")
         if args.csv_output:

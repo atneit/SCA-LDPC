@@ -10,3 +10,4 @@ perf.data.old
 test-hqc.key
 *.png
 *.csv
+*.pdf

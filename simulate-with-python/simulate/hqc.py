@@ -163,11 +163,12 @@ class HqcSimulationParams:
         EPSILON: Tuple[int, int],
         DECODE_EVERY: int,
         WEIGHT: int,
+        N_OVERRIDE: int = None
     ):
         self.HQC = HQC
-        self.N = HQC.params("N")
-        self.N1 = HQC.params("N1")
-        self.N2 = HQC.params("N2")
+        self.N = N_OVERRIDE if N_OVERRIDE else HQC.params("N")
+        self.N1 = None if N_OVERRIDE else HQC.params("N1")
+        self.N2 = None if N_OVERRIDE else HQC.params("N2")
         self.OUTER_DECODING_LIMIT = OUTER_DECODING_LIMIT
         self.EPSILON = EPSILON
         self.DECODE_EVERY = DECODE_EVERY
@@ -1210,27 +1211,27 @@ def test_hqc_decode_toy_example(seed):
     >>> test_hqc_decode_toy_example(0)
     True
     """
+    params = HqcSimulationParams(Hqc128, None, None, None, WEIGHT=3, N_OVERRIDE=20)
+    tracking = HqcSimulationTracking(params)
 
     rng = make_random_state(seed)
-    weight = 3
-    logger.debug(f"weight: {weight}")
-    N = 20  # TODO
-    logger.debug(f"N: {N}")
+    logger.debug(f"weight: {params.WEIGHT}")
+    logger.debug(f"N: {params.N}")
     y_sparse = [4, 5, 7, 9]  # TODO
     logger.debug(f"y_sparse: {y_sparse}")
 
-    Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
+    Hgen = make_random_ldpc_parity_check_matrix(params.N, params.WEIGHT, rng)
     logger.debug(f"Hgen: \n{Hgen}")
 
     r1_sparse = [i for (i, x) in enumerate(Hgen[:, 0]) if x != 0]
-    assert weight == len(r1_sparse)
+    assert params.WEIGHT == len(r1_sparse)
     logger.debug(f"r1_sparse: {r1_sparse}")
 
-    y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, N)
+    y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, params.N)
     logger.debug(f"y_times_r1: {y_times_r1}")
 
     checks = []
-    check_values = [(i, i in y_times_r1) for i in range(N)]  # TODO
+    check_values = [(i, i in y_times_r1) for i in range(params.N)]  # TODO
     logger.debug(f"check_values: {check_values}")
 
     H = None
@@ -1247,7 +1248,7 @@ def test_hqc_decode_toy_example(seed):
 
     logger.debug(f"checks: {checks}")
     logger.debug(f"H: \n{H}")
-    return decode(H, N, checks, y_sparse, 0.0)
+    return decode(params, tracking, H, checks, y_sparse)
 
 
 def test_hqc_decode_full_example(seed):
@@ -1258,24 +1259,23 @@ def test_hqc_decode_full_example(seed):
     >>> test_hqc_decode_full_example(0)
     True
     """
-    HQC = Hqc128()
+    params = HqcSimulationParams(Hqc128, None, None, None, WEIGHT=3)
+    tracking = HqcSimulationTracking(params)
 
     rng = make_random_state(seed)
-    weight = 3
-    N = HQC.params("N")
-    OMEGA = HQC.params("OMEGA")
+    OMEGA = params.HQC.params("OMEGA")
 
-    y_sparse = rng.choice(N, OMEGA, replace=False)
+    y_sparse = rng.choice(params.N, OMEGA, replace=False)
 
-    Hgen = make_random_ldpc_parity_check_matrix(N, weight, rng)
+    Hgen = make_random_ldpc_parity_check_matrix(params.N, params.WEIGHT, rng)
 
     r1_sparse = [i for (i, x) in enumerate(Hgen[:, 0]) if x != 0]
-    assert weight == len(r1_sparse)
+    assert params.WEIGHT == len(r1_sparse)
 
-    y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, N)
+    y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, params.N)
 
     checks = []
-    check_values = [(i, i in y_times_r1) for i in range(N)]
+    check_values = [(i, i in y_times_r1) for i in range(params.N)]
 
     H = None
     for (bit_n, check_value) in check_values:
@@ -1285,7 +1285,7 @@ def test_hqc_decode_full_example(seed):
             )
 
     logger.debug(f"checks: {len(checks)}")
-    return decode(H, N, checks, y_sparse, 0.0)
+    return decode(params, tracking, H, checks, y_sparse)
 
 
 if __name__ == "__main__":

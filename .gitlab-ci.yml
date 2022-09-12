@@ -32,6 +32,8 @@ rust:test:
 
 python:test:
   stage: test
+  tags:
+    - high-RAM
   script:
     - python3 --version # For debugging
     - source simulate-with-python/setup-environment.sh # Also builds rust package

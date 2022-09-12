@@ -11,24 +11,24 @@ use std::{
 
 const N: usize = 450;
 const R: usize = 150;
-const DV: usize = 7;
-const DC: usize = 3;
+const DV: usize = 3;
+const DC: usize = 7;
 const B: usize = 7;
 const Q: usize = B * 2 + 1;
 
 type MyTestDecoder = Decoder<N, R, DV, DC, Q, B, i8>;
 
-fn h_from_file<P, const N: usize, const R: usize>(path: P) -> Result<[[bool; N]; R]>
+fn h_from_file<P, const N: usize, const R: usize>(path: P) -> Result<[[i8; N]; R]>
 where
     P: AsRef<Path>,
 {
-    let mut ret = [[false; N]; R];
+    let mut ret = [[0; N]; R];
     let file = File::open(path.as_ref())?;
     let reader = BufReader::new(file);
     for (row, line) in reader.lines().enumerate() {
         for (column, value) in line?.split_whitespace().enumerate() {
-            let int: u8 = value.parse()?;
-            ret[row][column] = int != 0;
+            let int: i8 = value.parse()?;
+            ret[row][column] = int;
         }
     }
 
@@ -61,14 +61,14 @@ fn medium_decoder_benchmark(c: &mut Criterion) {
     });
 }
 
-type MyTinyTestDecoder = Decoder<6, 3, 4, 3, 15, 7, i8>;
+type MyTinyTestDecoder = Decoder<6, 3, 3, 4, 15, 7, i8>;
 
 fn small_decoder_benchmark(c: &mut Criterion) {
     let decoder_6_3_4_3_gf16 = MyTinyTestDecoder::new(
         [
-            [true, true, true, true, false, false],
-            [false, false, true, true, false, true],
-            [true, false, false, true, true, false],
+            [1, 1, 1, 1, 0, 0],
+            [0, 0, 1, 1, 0, 1],
+            [1, 0, 0, 1, 1, 0],
         ],
         10,
     );

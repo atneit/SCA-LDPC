@@ -4,6 +4,33 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
+        {
+            "name": "Remote attach",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/python-virtualenv/bin/python",
+            "miDebuggerServerAddress": "compiler3:1234",
+            "cwd": "${workspaceRoot}",
+            "externalConsole": true,
+            "linux": {
+                "MIMode": "gdb"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "attach",
+            "name": "Attach to PID",
+            "pid": "${command:pickMyProcess}" // use ${command:pickProcess} to pick other users' processes
+        },
+        {
+            "name": "Python: HQC",
+            "type": "python",
+            "request": "launch",
+            "module": "simulate.hqc",
+            "cwd": "${workspaceFolder}/simulate-with-python/",
+            "justMyCode": true
+        },
         {
             "type": "lldb",
             "request": "launch",
@@ -13,15 +40,61 @@
             "cwd": "${workspaceFolder}"
         },
         {
-            "name": "main.py",
+            "name": "main.py test",
             "type": "python",
             "request": "launch",
             "program": "simulate-with-python/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "qc_ldpc_code"
+                "test"
             ]
-        }
+        },
+        {
+            "name": "main.py hqc_simulate",
+            "type": "python",
+            "request": "launch",
+            "program": "simulate-with-python/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "hqc_simulate",
+                "--verbose",
+                "--decode-every",
+                "100",
+                "--key-file",
+                "test-hqc.key",
+                "--code-weight",
+                "50",
+                "--error-rate",
+                "0.005",
+                "--seed",
+                "0"
+            ]
+        },
+        {
+            "name": "main.py test_rust_package",
+            "type": "python",
+            "request": "launch",
+            "program": "simulate-with-python/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "test_rust_package",
+            ]
+        },
+        {
+            "name": "main.py view_hqc_simulation_csv",
+            "type": "python",
+            "request": "launch",
+            "program": "simulate-with-python/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "view_hqc_simulation_csv",
+                "--csv-output",
+                "hqc-simulation.csv",
+            ]
+        },
     ]
 }

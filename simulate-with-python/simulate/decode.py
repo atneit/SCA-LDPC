@@ -1,4 +1,3 @@
-from concurrent.futures import as_completed
 import numpy as np
 from ldpc import bp_decoder
 import logging
@@ -180,32 +179,62 @@ def simulate_frame_error_rate(
 
 def simulate_frame_error_rate_rust(
     H: np.ndarray,
+    B,
     error_rate: float,
     runs: int,
     rng: np.random.RandomState,
     threads: int,
 ):
     """
-    This function simulates an all-zero codeword with some noisy symbols
+    This function simulates an all-zero codeword with some noisy symbols.
+
+
+    >>> from . import utils
+    >>> from . import make_code
+    >>> rng = utils.make_random_state(1)
+    >>> runs = 1
+    >>> error_rate = 0.005
+    >>> threads = 1
+    >>> k = 300  # 17669
+    >>> r = 150  #
+    >>> B = 1
+    >>> rate = k / (k + r)
+    >>> row_weight = 6
+    >>> column_weight = 3
+    >>> # n = k + r
+    >>> H = make_code.make_regular_ldpc_parity_check_matrix_identity(
+    ...     k, r, column_weight, row_weight, rng
+    ... )
+    >>> simulate_frame_error_rate_rust(H, B, error_rate, runs, rng, threads)
+    1
     """
-    from simulate_rs import DecoderN450R150V7C3GF16
+    import simulate_rs
     from concurrent.futures import (
         ThreadPoolExecutor,
         as_completed,
     )
 
+    # parameters
+    r = H.shape[0]
     n = H.shape[1]
-    q = 16
-    channel_output = np.zeros((n, q)).astype(np.float32)  # error vector
+    v = np.count_nonzero(H, axis=0).max()
+    c = np.count_nonzero(H, axis=1).max()
+    B = 1
+    BB = B * 2 + 1
+    iterations = 5
 
-    decoder = DecoderN450R150V7C3GF16(H.astype("uint8"), 5)
+    # decoder
+    decoder_name = f"DecoderN{n}R{r}V{v}C{c}B{B}"
+    logger.debug(f"Searching for decoder '{decoder_name}' from rust implementation.")
+    decoder_cls = getattr(simulate_rs, decoder_name)
+    decoder = decoder_cls(H.astype(np.int8), iterations)
 
-    p_linear = 1 / q
-    channel_prob = [p_linear for x in range(0, q)]
+    p_linear = 1 / (BB)
+    channel_prob = [p_linear for x in range(0, BB)]
     good_variable = np.array(channel_prob)
     bad_variable = np.array(channel_prob)
-    good_variable[[0, 1]] = np.array([2 * p_linear, 0])
-    bad_variable[[-1, -2]] = np.array([2 * p_linear, 0])
+    good_variable[[B, -1]] = np.array([1.75 * p_linear, 0.25 * p_linear]) # double the probability of correct value 0
+    bad_variable[[-1, B]] = np.array([1.75 * p_linear, 0.25 * p_linear]) # double the probability of incorrect value BB-1
 
     logger.debug(f"Good variable: \n{good_variable}")
     logger.debug(f"Bad variable: \n{bad_variable}")
@@ -214,6 +243,7 @@ def simulate_frame_error_rate_rust(
         f"Starting {runs} decoding calls with random noise, using {threads} threads..."
     )
 
+    channel_output = np.zeros((n, BB)).astype(np.float32)  # error vector
     with ThreadPoolExecutor(threads) as executor:
         run = 0
         decoding_map = {}
@@ -227,7 +257,7 @@ def simulate_frame_error_rate_rust(
                     channel_output[i, :] = good_variable
             if not errs:
                 continue
-            logger.debug("Number of bad symbols")
+            logger.debug(f"Number of bad symbols: {errs}")
             logger.debug(f"Channel output: \n{channel_output}")
             decoding_map[executor.submit(decoder.min_sum, channel_output.copy())] = errs
             run += 1
@@ -238,7 +268,8 @@ def simulate_frame_error_rate_rust(
         for future in as_completed(decoding_map):
             errs = decoding_map[future]
             decoding = future.result()
-            logger.debug(f"Decoding: \n{decoding}")
+
+            logger.debug(f"decoded: {decoding}")
             if decoding == [0] * n:
                 max_errs_success = max(errs, max_errs_success)
                 successes += 1

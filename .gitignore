@@ -6,3 +6,8 @@ report.xml
 flamegraph.svg
 perf.data
 perf.data.old
+*.log
+test-hqc.key
+*.png
+*.csv
+*.pdf

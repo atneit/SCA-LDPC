@@ -2,6 +2,7 @@
 # only cache local items.
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  GIT_SUBMODULE_STRATEGY: recursive
 
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
@@ -17,6 +18,9 @@ cache:
 rust:test:
   stage: test
   script:
+    - pushd dependencies/liboqs-rs-bindings
+    - ./build-oqs.sh --yes
+    - popd
     - cargo install cargo2junit
     - cargo test --target-dir target/test --
       -Z unstable-options --format json --report-time |

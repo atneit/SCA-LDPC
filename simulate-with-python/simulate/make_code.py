@@ -1,7 +1,7 @@
-import sys
 import numpy as np
 from scipy.linalg import circulant
 from . import utils
+from . import distance_spectrum
 import logging
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,45 @@ def flatten_matrix_parts(parts: np.ndarray):
     # for part in parts:
     # logger.debug("part: \n" + str(part))
     return np.concatenate(parts, axis=1)
+
+
+def circular_qary_parity_check_block(
+    block_len: int, column_weight: int, rng: np.random.RandomState
+):
+    block = np.zeros((block_len, block_len), dtype=np.int8)
+    nonzero_idx = set()
+    while len(nonzero_idx) < column_weight:
+        i = rng.randint(0, block_len - 1)
+        if i not in nonzero_idx:
+            nonzero_idx.add(i)
+    nonzero_idx = list(nonzero_idx)
+    nonzero_val = list((1 if i == 0 else -1) for i in nonzero_idx)
+    for i in range(block_len):
+        for j in range(column_weight):
+            block[i, nonzero_idx[j]] = nonzero_val[j] 
+            nonzero_idx[j] += 1
+            if nonzero_idx[j] == block_len:
+                nonzero_idx[j] = 0
+                nonzero_val[j] = -nonzero_val[j]
+    return block
+        
+
+
+def make_qary_qc_parity_check_matrix(
+    block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
+):
+
+    # construct the cyclic blocks
+    parts = [
+        circular_qary_parity_check_block(block_len, column_weight, rng)
+        for _ in range(num_blocks)
+    ]
+
+    # Add identity block
+    parts.append(np.identity(block_len, dtype=int))
+
+    # Flatten into one big matrix
+    return flatten_matrix_parts(parts)
 
 
 def make_qc_parity_check_matrix(
@@ -109,7 +148,7 @@ def make_regular_ldpc_parity_check_matrix(
 
     if r != (k * column_weight) // row_weight:
         raise ValueError(
-            """r must follow (k * column_weight) // row_weight for the parity check matrix to be regular"""
+            """r must follow '(k * column_weight) // row_weight' for the parity check matrix to be regular"""
         )
 
     # with np.printoptions(threshold=sys.maxsize):
@@ -166,3 +205,59 @@ def make_regular_ldpc_parity_check_matrix_identity(
             np.identity(r, dtype=int),
         ]
     )
+
+
+def make_random_ldpc_parity_check_matrix(n, weight, seed=None):
+    """
+    Constructs a regular ldpc parity check matrix.
+
+    The shape is square: n * n.
+
+    H is a cyclic matrix with a random first row. The first row is constructed such that
+    the distance spectrum of the non-zero positions is 0 or 1, for all distances.
+
+    >>> make_random_ldpc_parity_check_matrix(10, 3, utils.make_random_state(0))
+    array([[0, 1, 1, 0, 0, 0, 0, 0, 1, 0],
+           [0, 0, 1, 1, 0, 0, 0, 0, 0, 1],
+           [1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+           [0, 1, 0, 0, 1, 1, 0, 0, 0, 0],
+           [0, 0, 1, 0, 0, 1, 1, 0, 0, 0],
+           [0, 0, 0, 1, 0, 0, 1, 1, 0, 0],
+           [0, 0, 0, 0, 1, 0, 0, 1, 1, 0],
+           [0, 0, 0, 0, 0, 1, 0, 0, 1, 1],
+           [1, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+           [1, 1, 0, 0, 0, 0, 0, 1, 0, 0]])
+    """
+
+    first_row = distance_spectrum.gen_array_ds_multiplicity(n, weight, 1, seed)
+    H0 = circulant(first_row)
+    return H0
+
+
+
+def make_random_ldpc_parity_check_matrix_with_identity(n, weight, seed=None):
+    """
+    Constructs a regular ldpc parity check matrix.
+
+    The shape is [H_(n*n)|I_(n*n)] where the two square matrices H and I are both cyclic.
+
+    I is the identity matrix.
+
+    H is a cyclic matrix with a random first row. The first row is constructed such that
+    the distance spectrum of the non-zero positions is 0 or 1, for all distances.
+
+    >>> make_random_ldpc_parity_check_matrix_with_identity(10, 3, utils.make_random_state(0))
+    array([[0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+           [0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+           [0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+           [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+           [0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+           [0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+           [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+           [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+    """
+    H0 = make_random_ldpc_parity_check_matrix(n, weight, seed)
+    H = flatten_matrix_parts([H0, np.identity(n, dtype=int)])
+    return H

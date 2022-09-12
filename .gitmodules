@@ -1,0 +1,3 @@
+[submodule "dependencies/liboqs-rs-bindings"]
+	path = dependencies/liboqs-rs-bindings
+	url = https://github.com/atneit/liboqs-rs-bindings.git

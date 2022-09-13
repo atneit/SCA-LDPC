@@ -105,7 +105,7 @@ class Commands(CommandsBase):
             "--error-rate",
             action="store",
             type=float,
-            default=0.05,
+            default=0.00,
             help="The error rate of the simulated binary symmetric channel.",
         )
         error_group.add_argument(

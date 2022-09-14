@@ -120,36 +120,42 @@ def view_hqc_simulation_csv(csv_file):
         y="count",
         col="count_type",
         row="stride_type",
-        hue="label",
+        hue="epsilon1",
         kind="line",
-        facet_kws={"margin_titles": True, "sharey": False, "sharex": False},
+        facet_kws={"margin_titles": False, "sharey": False, "sharex": False},
     )
     for ((row, col), ax) in g.axes_dict.items():
-        success_stride = np.array([])
-        ax2 = ax.twinx()
-        ax2.tick_params(axis="y", right=False)
         if col in ["remaining bit-flips"]:
+            columns=["stride", "epsilon1"]
+            success_stride = pd.DataFrame(columns=columns)
+            ax2 = ax.twinx()
+            ax2.tick_params(axis="y", right=False)
             mask = (
                 (df["count_type"] == col)
                 & (df["stride_type"] == row)
                 & (df["success"] == True)
             )
-            success_stride = df.loc[mask, "stride"].to_numpy()
-        box = sns.boxplot(
-            x=success_stride,
-            ax=ax2,
-            orient="h",
-            width=0.05,
-            notch=False,
-            whis=(0, 100),
-            color="white",
-            saturation=0,
-            boxprops={'facecolor':'none', 'edgecolor':'black'},
-            medianprops={'color':'black'},
-            whiskerprops={'color':'black'},
-            capprops={'color':'black'}
-        )
-        if success_stride.size > 0:
+            success_stride = df.loc[mask,columns].reset_index(drop=True)
+            print(success_stride.dtypes)
+            print(success_stride)
+            box = sns.boxplot(
+                data=success_stride,
+                ax=ax2,
+                x="stride",
+                y="epsilon1",
+                hue="epsilon1",
+                orient="h",
+                dodge=True,
+                width=0.05,
+                notch=False,
+                whis=(0, 100),
+                # color="white",
+                # saturation=0,
+                # boxprops={'facecolor':'none', 'edgecolor':'black'},
+                # medianprops={'color':'black'},
+                # whiskerprops={'color':'black'},
+                # capprops={'color':'black'}
+            )
             logger.info(f"Added boxplot to ({row},{col})")
             lines = box.get_lines()
             boxes = [c for c in box.get_children() if type(c).__name__ == "PathPatch"]
@@ -167,9 +173,9 @@ def view_hqc_simulation_csv(csv_file):
                     clip_on=True,
                 )
     g.set_axis_labels(
-        "Number of ... (see right margin)", "Number of ... (see top margin)"
+        "Number of", "Number of"
     )
-    g.set_titles(col_template="{col_name}", row_template="{row_name}")
+    g.set_titles(col_template="y = {col_name}", row_template="x = {row_name}")
     # g.add_legend()
     # g.tight_layout()
 

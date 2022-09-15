@@ -5,9 +5,9 @@ set -o pipefail
 
 live=0
 
-for E in 0.10 0.05 0.005 0.0
+for I in {0..99}
 do 
-    for I in {0..9}
+    for E in 0.10 0.05 0.005 0.0
     do 
         LOGFILE="simulation-data/hqc-simulation-E$E-$I.log"
         CMD="simulate-with-python/main.py hqc_simulate \
@@ -23,7 +23,7 @@ do
             echo "Launching: $CMD"
             ($CMD 2>&1 | tee simulation-data/hqc-simulation-E$E-$I.log | grep -v -E 'DEBUG|INFO') &
             let live=live+1
-            if [[ $live > 4 ]];
+            if [[ $live > 6 ]];
             then
                 # wait for first job to return so we can start the next
                 wait -n -p id || { echo 'Command failed, aborting script'; exit 1; }

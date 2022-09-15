@@ -8,20 +8,51 @@ rootlogger.setLevel(level="INFO")
 # get new logger for this module only
 logger = logging.getLogger(__name__)
 
+import matplotlib
+
+matplotlib.use("pgf")
+matplotlib.rcParams.update(
+    {
+        "pgf.texsystem": "lualatex",
+        "font.family": "serif",
+        "font.serif": ["Computer Modern Roman"],
+        "font.sans-serif": ["Computer Modern Sans Serif"],
+        "font.monospace": ["Computer Modern Typewriter"],
+        "text.usetex": True,
+        "pgf.rcfonts": False,
+    }
+)
+
 import sys
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 
-sns.set_theme(style="ticks")
+sns.set_theme(
+    style="darkgrid",
+    font="serif",
+    rc={
+        "legend.frameon": True,
+    },
+)
 
 # Reset original log level for the root level
 rootlogger.setLevel(origlevel)
 
 
+def plt_write(outputname="output.pgf", w=4.8, h=2):
+    plt.gcf().set_size_inches(w=w, h=h)
+    plt.savefig(outputname, bbox_inches="tight")
+    print("Output printed to " + outputname)
+    plt.figure().clear()
+    plt.close()
+    plt.cla()
+    plt.clf()
+
+
 def wide_to_long_format(df: pd.DataFrame):
-    logger.info(f"Converting this DataFrame from wide to long: \n{df}")
+    logger.info(f"Converting DataFrame from wide to long")
     meta_col = ["label", "alg", "weight", "epsilon0", "epsilon1"]
     new_df = pd.DataFrame(
         columns=meta_col + ["stride_type", "stride", "count_type", "count"]
@@ -41,9 +72,6 @@ def wide_to_long_format(df: pd.DataFrame):
     new_df[to_convert] = new_df[to_convert].astype("category")
     to_convert = ["weight", "stride", "count"]
     new_df[to_convert] = new_df[to_convert].astype("int")
-
-    logger.info(f"new_df: \n{new_df.dtypes}")
-    logger.info(f"new_df: \n{new_df}")
     return new_df
 
 
@@ -58,7 +86,7 @@ def extract_pair(
     return new_df
 
 
-def view_hqc_simulation_csv(csv_file):
+def load_data(csv_file):
     logger.info(f"Reading file: {csv_file}")
     df = pd.read_csv(csv_file)
 
@@ -75,18 +103,13 @@ def view_hqc_simulation_csv(csv_file):
     df = round_stride_of_type(df, "oracle_calls", 500)
     df = round_stride_of_type(df, "unsatisfied", 20)
 
-    # Remove "oracle calls" and "unsatisfied", they are not interesting here
-    # Filter away uninteresting data
-    df = df[
-        (
-            (True)
-            & (df["weight"].isin([50]))
-            & (df["stride_type"].isin(["checks", "oracle_calls"]))
-            & (df["count_type"].isin(["remaining-flips", "found_bad_checks"]))
-        )
-    ]
+    logger.info(f"Data:\n{df}")
 
-    # Rename for human readable axis labels
+    return df
+
+
+def rename_human_readable(df):
+    df = df.copy()
     df["stride_type"] = df["stride_type"].cat.rename_categories(
         {
             "checks": "parity checks",
@@ -105,6 +128,13 @@ def view_hqc_simulation_csv(csv_file):
         }
     )
 
+    df = df.rename(
+        columns={
+            "epsilon0": "Oracle accuracy $\epsilon_0$",
+            "epsilon1": "Oracle accuracy $\epsilon_1$",
+        }
+    )
+
     df["stride_type"] = df["stride_type"].cat.remove_unused_categories()
     df["count_type"] = df["count_type"].cat.remove_unused_categories()
 
@@ -113,74 +143,110 @@ def view_hqc_simulation_csv(csv_file):
     )
     logger.info("count_types remaining: " + str(list(df["count_type"].cat.categories)))
 
-    logger.info("Plotting data")
-    g = sns.relplot(
-        data=df,
-        x="stride",
-        y="count",
-        col="count_type",
-        row="stride_type",
-        hue="epsilon1",
-        kind="line",
-        facet_kws={"margin_titles": False, "sharey": False, "sharex": False},
-    )
-    for ((row, col), ax) in g.axes_dict.items():
-        if col in ["remaining bit-flips"]:
-            columns=["stride", "epsilon1"]
-            success_stride = pd.DataFrame(columns=columns)
-            ax2 = ax.twinx()
-            ax2.tick_params(axis="y", right=False)
-            mask = (
-                (df["count_type"] == col)
-                & (df["stride_type"] == row)
-                & (df["success"] == True)
-            )
-            success_stride = df.loc[mask,columns].reset_index(drop=True)
-            print(success_stride.dtypes)
-            print(success_stride)
-            box = sns.boxplot(
-                data=success_stride,
-                ax=ax2,
-                x="stride",
-                y="epsilon1",
-                hue="epsilon1",
-                orient="h",
-                dodge=True,
-                width=0.05,
-                notch=False,
-                whis=(0, 100),
-                # color="white",
-                # saturation=0,
-                # boxprops={'facecolor':'none', 'edgecolor':'black'},
-                # medianprops={'color':'black'},
-                # whiskerprops={'color':'black'},
-                # capprops={'color':'black'}
-            )
-            logger.info(f"Added boxplot to ({row},{col})")
-            lines = box.get_lines()
-            boxes = [c for c in box.get_children() if type(c).__name__ == "PathPatch"]
-            lines_per_box = int(len(lines) / len(boxes))
-            for median in lines[4 : len(lines) : lines_per_box]:
-                x, y = (data.mean() for data in median.get_data())
-                box.annotate(
-                    "Decoding success",
-                    xy=(x, y),
-                    xycoords="data",
-                    xytext=(30, 30),
-                    textcoords="offset pixels",
-                    horizontalalignment='center',
-                    verticalalignment='top',
-                    clip_on=True,
-                )
-    g.set_axis_labels(
-        "Number of", "Number of"
-    )
-    g.set_titles(col_template="y = {col_name}", row_template="x = {row_name}")
-    # g.add_legend()
-    # g.tight_layout()
+    return df
 
-    logger.info("Writing data to file")
-    g.savefig("view_hqc_simulation_csv.pdf")
+
+class Plotter:
+    def __init__(self, df: pd.DataFrame, outputname: str):
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        self.logger.info("Filtering data...")
+        df = self.filter_data(df)
+
+        self.logger.info("Make categories human readable...")
+        df = rename_human_readable(df)
+
+        self.logger.info("Plotting the graph...")
+        self.plot(df)
+
+        self.logger.info("Writing the graph to its destination: " + outputname)
+        plt_write(outputname)
+
+    def plot(self, df: pd.DataFrame):
+        """To be overridden"""
+        pass
+
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """To be overridden"""
+        pass
+
+
+class BoxPlotSuccessChecksVsWeight(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.query(
+            "epsilon1 == 1.0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        alg = df["alg"].iloc[0]
+        g = sns.catplot(
+            data=df,
+            x="weight",
+            y="stride",
+            row="count_type",
+            col="stride_type",
+            orient="v",
+            kind="box",
+            # order=[1.0, 0.995, 0.95, 0.9],
+            palette="cubehelix_r",
+        )
+        g.set_titles("")
+        g.set(ylim=(0, None))
+        g.set_axis_labels("LDPC code column weight", "parity checks")
+
+class LinePlotChecksRemainingBitFlips(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.query(
+            "weight == 50 and stride_type == 'checks' and count_type == 'remaining-flips'"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        g = sns.relplot(
+            data=df,
+            x="stride",
+            y="count",
+            row="count_type",
+            col="stride_type",
+            hue="Oracle accuracy $\epsilon_1$",
+            kind="line",
+            palette="colorblind",
+        )
+        g.set_titles("")
+        g.set_axis_labels("Parity checks", "Remaining bit-flips")
+
+
+class BoxPlotSuccessOracleCalls(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.query(
+            "weight == 50 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        desc = df.groupby("Oracle accuracy $\epsilon_1$")["stride"].describe()
+        self.logger.info(f"Describe data: \n{desc}")
+        g = sns.catplot(
+            data=df,
+            x="stride",
+            y="Oracle accuracy $\epsilon_1$",
+            row="count_type",
+            col="stride_type",
+            orient="h",
+            kind="box",
+            # order=[1.0, 0.995, 0.95, 0.9],
+            palette="colorblind",
+        )
+        g.set_titles("")
+        g.set(xlim=(0, None))
+        g.set_axis_labels("Oracle calls", "Oracle accuracy $\epsilon_1$")
+
+
+def view_hqc_simulation_csv(csv_file):
+
+    df = load_data(csv_file)
+
+    BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
+    LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
+    BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")
 
 
 def round_stride_of_type(df, stride_type, multiple_of):

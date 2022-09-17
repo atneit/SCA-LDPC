@@ -41,8 +41,9 @@ sns.set_theme(
 rootlogger.setLevel(origlevel)
 
 
-def plt_write(outputname="output.pgf", w=4.8, h=2):
+def plt_write(outputname="output.pgf", w=4.8, h=4):
     plt.gcf().set_size_inches(w=w, h=h)
+    plt.tight_layout()
     plt.savefig(outputname, bbox_inches="tight")
     print("Output printed to " + outputname)
     plt.figure().clear()
@@ -130,8 +131,8 @@ def rename_human_readable(df):
 
     df = df.rename(
         columns={
-            "epsilon0": "Oracle accuracy $\epsilon_0$",
-            "epsilon1": "Oracle accuracy $\epsilon_1$",
+            "epsilon0": "$\epsilon_0$",
+            "epsilon1": "$\epsilon$",
         }
     )
 
@@ -174,7 +175,7 @@ class Plotter:
 class BoxPlotSuccessChecksVsWeight(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.query(
-            "epsilon1 == 1.0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+            r"`weight` % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
@@ -183,14 +184,15 @@ class BoxPlotSuccessChecksVsWeight(Plotter):
             data=df,
             x="weight",
             y="stride",
-            row="count_type",
-            col="stride_type",
+            col="$\epsilon$",
+            col_wrap=2,
             orient="v",
             kind="box",
+            dodge=True,
             # order=[1.0, 0.995, 0.95, 0.9],
             palette="cubehelix_r",
         )
-        g.set_titles("")
+        #g.set_titles("")
         g.set(ylim=(0, None))
         g.set_axis_labels("LDPC code column weight", "parity checks")
 
@@ -207,7 +209,7 @@ class LinePlotChecksRemainingBitFlips(Plotter):
             y="count",
             row="count_type",
             col="stride_type",
-            hue="Oracle accuracy $\epsilon_1$",
+            hue="$\epsilon$",
             kind="line",
             palette="colorblind",
         )
@@ -218,26 +220,26 @@ class LinePlotChecksRemainingBitFlips(Plotter):
 class BoxPlotSuccessOracleCalls(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.query(
-            "weight == 50 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
+            r"`weight` % 10 == 0 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        desc = df.groupby("Oracle accuracy $\epsilon_1$")["stride"].describe()
+        desc = df.groupby("$\epsilon$")["stride"].describe()
         self.logger.info(f"Describe data: \n{desc}")
         g = sns.catplot(
             data=df,
             x="stride",
-            y="Oracle accuracy $\epsilon_1$",
-            row="count_type",
-            col="stride_type",
+            y="$\epsilon$",
+            col="weight",
+            col_wrap=2,
             orient="h",
             kind="box",
             # order=[1.0, 0.995, 0.95, 0.9],
             palette="colorblind",
         )
-        g.set_titles("")
+        #g.set_titles("")
         g.set(xlim=(0, None))
-        g.set_axis_labels("Oracle calls", "Oracle accuracy $\epsilon_1$")
+        g.set_axis_labels("Oracle calls", "$\epsilon$")
 
 
 def view_hqc_simulation_csv(csv_file):
@@ -245,7 +247,7 @@ def view_hqc_simulation_csv(csv_file):
     df = load_data(csv_file)
 
     BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
-    LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
+    #LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
     BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")
 
 

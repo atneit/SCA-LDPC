@@ -10,6 +10,7 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = "simulate"
 
 from collections import Counter
+from math import prod
 from random import random
 from typing import Tuple, Union
 import pickle
@@ -61,7 +62,9 @@ class SingletonAssertDecodingFailure(object):
 
     def assert_decoding_success(self, expect, *args, **kwargs):
         kwargs["debug"] = True
-        result = hqc_decoding_oracle(*args, **kwargs)
+        result = wrapped_hqc_decoding_oracle(
+            *args, **kwargs, require_false=0.9999, require_true=0.9999
+        )
         if self.raise_exception:
             assert result == expect
         elif result != expect:
@@ -163,7 +166,7 @@ class HqcSimulationParams:
         EPSILON: Tuple[int, int],
         DECODE_EVERY: int,
         WEIGHT: int,
-        N_OVERRIDE: int = None
+        N_OVERRIDE: int = None,
     ):
         self.HQC = HQC
         self.N = N_OVERRIDE if N_OVERRIDE else HQC.params("N")
@@ -398,8 +401,15 @@ def next_success_bit(
     for bit in rng.choice(available_bits, totry, replace=False):
         ct = flip_single_bit(ct, block, bit, N, N2)
         bit_status[bit]["status"] = bit_status[bit]["status"].toggled()
-        if hqc_decoding_oracle(
-            HQC, ct, priv, pt, rng, epsilon=epsilon, result_meta=bit_status[bit]
+        if wrapped_hqc_decoding_oracle(
+            HQC,
+            ct,
+            priv,
+            pt,
+            rng,
+            epsilon=epsilon,
+            result_meta=bit_status[bit],
+            require_true=0.999,
         ):
             bit_status[bit]["result"] = IfFlipResult.SUCCESS
             logger.info(
@@ -418,8 +428,15 @@ def next_success_bit(
     for bit in rng.choice(available_bits, len(available_bits), replace=False):
         ct = flip_single_bit(ct, block, bit, N, N2)
         bit_status[bit]["status"] = bit_status[bit]["status"].toggled()
-        if hqc_decoding_oracle(
-            HQC, ct, priv, pt, rng, epsilon=epsilon, result_meta=bit_status[bit]
+        if wrapped_hqc_decoding_oracle(
+            HQC,
+            ct,
+            priv,
+            pt,
+            rng,
+            epsilon=epsilon,
+            result_meta=bit_status[bit],
+            require_true=0.999,
         ):
             bit_status[bit]["result"] = IfFlipResult.SUCCESS
             logger.info(
@@ -482,7 +499,7 @@ def next_failure_bit(
     for bit in rng.choice(available_bits, len(available_bits), replace=False):
         ct = flip_single_bit(ct, tracking.current_block_nr, bit, params.N, params.N2)
         tracking.current_bits_status()[bit]["status"] = FlipStatus.FLIPPED
-        if not hqc_decoding_oracle(
+        if not wrapped_hqc_decoding_oracle(
             params,
             tracking,
             ct,
@@ -490,43 +507,17 @@ def next_failure_bit(
             pt,
             rng,
             result_meta=tracking.current_bits_status()[bit],
+            require_false=0.99999,
         ):
-            # Repeat, just to make sure, we don't want a bad decision due to measurement noise here
-            if not hqc_decoding_oracle(
-                params,
-                tracking,
-                ct,
-                priv,
-                pt,
-                rng,
-                result_meta=tracking.current_bits_status()[bit],
-            ):
-                # Repeat one more time to handle really noisy measurements
-                if not hqc_decoding_oracle(
-                    params,
-                    tracking,
-                    ct,
-                    priv,
-                    pt,
-                    rng,
-                    result_meta=tracking.current_bits_status()[bit],
-                ):
-                    tracking.current_bits_status()[bit]["result"] = IfFlipResult.FAILURE
-                    logger.info(
-                        f"Decoding failure by flipping bit {bit} in block {tracking.current_block_nr} check = 0"
-                    )
-                    hqc_decoding_oracle(
-                        params, tracking, ct, priv, pt, rng, debug=True
-                    )  # debug log the oracle output
-                    return (bit, tracking.current_bits_status()[bit]["status"], ct)
-                else:
-                    logger.warning(
-                        f"Failed secondary confirmation of decoding failure for bit {bit} in outer block {tracking.current_block_nr}"
-                    )
-            else:
-                logger.warning(
-                    f"Failed primary confirmation of decoding failure for bit {bit} in outer block {tracking.current_block_nr}"
-                )
+            tracking.current_bits_status()[bit]["result"] = IfFlipResult.FAILURE
+            logger.info(
+                f"Decoding failure by flipping bit {bit} in block {tracking.current_block_nr} check = 0"
+            )
+            # confirm our result
+            SingletonAssertDecodingFailure().assert_decoding_success(
+                False, params, tracking, ct, priv, pt, rng, debug=True
+            )  # debug log the oracle output
+            return (bit, tracking.current_bits_status()[bit]["status"], ct)
         else:
             logger.debug(
                 f"Flipped bit {bit} of outer block {tracking.current_block_nr}"
@@ -568,7 +559,7 @@ def find_minimal_failure_flips(
     successes = []
     for bit in available_bits:
         ctmod = flip_single_bit(ct, tracking.current_block_nr, bit, params.N, params.N2)
-        if hqc_decoding_oracle(
+        if wrapped_hqc_decoding_oracle(
             params,
             tracking,
             ctmod,
@@ -576,53 +567,25 @@ def find_minimal_failure_flips(
             pt,
             rng,
             result_meta=tracking.current_bits_status()[bit],
+            require_false=0.9999,
+            require_true=0.99,
         ):
-            if hqc_decoding_oracle(
-                params,
-                tracking,
-                ctmod,
-                priv,
-                pt,
-                rng,
-                result_meta=tracking.current_bits_status()[bit],
-            ):
-                if hqc_decoding_oracle(
-                    params,
-                    tracking,
-                    ctmod,
-                    priv,
-                    pt,
-                    rng,
-                    result_meta=tracking.current_bits_status()[bit],
-                ):
-                    if save_results:
-                        tracking.current_bits_status()[bit]["result"] = IfFlipResult.SUCCESS
-                        logger.info(
-                            f"Decoding success if unflipping bit {bit} in block {tracking.current_block_nr} check = 0"
-                        )
-                        hqc_decoding_oracle(params, tracking, ctmod, priv, pt, rng, debug=True)
-                        # Add bit to return
-                        successes.append(
-                            (bit, tracking.current_bits_status()[bit]["certainty"])
-                        )
-                    else:
-                        logger.debug(
-                            f"Discarded unflipped bit {bit} of outer block {tracking.current_block_nr}"
-                        )
-                else:
-                    tracking.current_bits_status()[bit]["status"] = FlipStatus.UNFLIPPED
-                    logger.debug(
-                        f"Unflipped bit {bit} of outer block {tracking.current_block_nr}"
-                    )
-                    # set new ciphertext with fewer flipped bits but still decoding failure
-                    ct = ctmod
-            else:
-                tracking.current_bits_status()[bit]["status"] = FlipStatus.UNFLIPPED
-                logger.debug(
-                    f"Unflipped bit {bit} of outer block {tracking.current_block_nr}"
+            if save_results:
+                tracking.current_bits_status()[bit]["result"] = IfFlipResult.SUCCESS
+                logger.info(
+                    f"Decoding success if unflipping bit {bit} in block {tracking.current_block_nr} check = 0"
                 )
-                # set new ciphertext with fewer flipped bits but still decoding failure
-                ct = ctmod
+                wrapped_hqc_decoding_oracle(
+                    params, tracking, ctmod, priv, pt, rng, debug=True
+                )
+                # Add bit to return
+                successes.append(
+                    (bit, tracking.current_bits_status()[bit]["certainty"])
+                )
+            else:
+                logger.debug(
+                    f"Discarded unflipped bit {bit} of outer block {tracking.current_block_nr}"
+                )
         else:
             tracking.current_bits_status()[bit]["status"] = FlipStatus.UNFLIPPED
             logger.debug(
@@ -644,7 +607,7 @@ def find_successes_by_flipping(
     Returns array of bits that if flipped would result in a decoding success
     """
 
-    # Verify starting assumption "successfully decodes"
+    # Verify starting assumption "fails to decode"
     SingletonAssertDecodingFailure().assert_decoding_success(
         False, params, tracking, ct, priv, pt, rng, debug=True
     )
@@ -659,7 +622,7 @@ def find_successes_by_flipping(
     for bit in available_bits:
         ctmod = flip_single_bit(ct, tracking.current_block_nr, bit, params.N, params.N2)
         # tracking.current_bits_status()[bit]["status"] = tracking.current_bits_status()[bit]["status"].toggled()
-        if hqc_decoding_oracle(
+        if wrapped_hqc_decoding_oracle(
             params,
             tracking,
             ctmod,
@@ -667,13 +630,17 @@ def find_successes_by_flipping(
             pt,
             rng,
             result_meta=tracking.current_bits_status()[bit],
+            require_false=0.99,
+            require_true=0.999,
         ):
             tracking.current_bits_status()[bit]["result"] = IfFlipResult.SUCCESS
             logger.info(
                 f"Decoding success if flipping bit {bit} in block {tracking.current_block_nr} check = 1"
             )
             # debug
-            hqc_decoding_oracle(params, tracking, ctmod, priv, pt, rng, debug=True)
+            wrapped_hqc_decoding_oracle(
+                params, tracking, ctmod, priv, pt, rng, debug=True
+            )
             # Return the unflipped ct
             successes.append((bit, tracking.current_bits_status()[bit]["certainty"]))
         else:
@@ -807,7 +774,34 @@ def bytes_compare(array, compare_to, delimit=False, pad=True):
     return hex
 
 
-def hqc_decoding_oracle(
+def wrapped_hqc_decoding_oracle(*args, require_false=0.5, require_true=0.5, **kwargs):
+
+    if "require" in kwargs:
+        raise Exception(
+            "obsolete argument require, use require_true and require_false instead"
+        )
+
+    result_meta = kwargs.pop("result_meta", dict(certainty=0.0))
+
+    require = (require_false, require_true)
+    results = ([], [])
+    tries = 0
+    while True:
+        tries += 1
+        new_meta = dict()
+        result = inner_hqc_decoding_oracle(*args, **kwargs, result_meta=new_meta)
+        results[result].append(new_meta["certainty"])
+
+        certainty = 1.0 - prod([1.0 - p for p in results[result]])
+        if certainty >= require[result]:
+            logger.debug(
+                f'Wrapped oracle made decision "{result}" after {tries} tries. Certainty: {certainty} >= {require[result]}'
+            )
+            result_meta["certainty"] = certainty
+            return result
+
+
+def inner_hqc_decoding_oracle(
     params: HqcSimulationParams,
     tracking: HqcSimulationTracking,
     ct,
@@ -859,7 +853,7 @@ def hqc_decoding_oracle(
     else:
         tracking.num_oracle_calls += 1
         if invert_result:
-            logger.warning(
+            logger.info(
                 f"Inverting oracle decision (originally: {result}) due to specified epsilon value: {failure_rate}"
             )
             result = not result
@@ -996,8 +990,8 @@ def simulate_hqc_idealized_oracle(
     Main function for simulating HQC attack
     """
     logger.info("Selecting Hqc128 as current HQC version!")
-    if error_rate < 1.0:
-        SingletonAssertDecodingFailure().raise_exception = True
+    if error_rate > 0.0:
+        SingletonAssertDecodingFailure().raise_exception = False
     noise_level = 1.0 - error_rate
     params = HqcSimulationParams(
         HQC=Hqc128,
@@ -1043,7 +1037,7 @@ def simulate_hqc_idealized_oracle(
         # Print debug output
         y_times_r1 = sparse_times_sparse(y_sparse, r1_sparse, params.N)
         logger.debug(f"y_times_r1: {y_times_r1}")
-        hqc_decoding_oracle(
+        wrapped_hqc_decoding_oracle(
             params,
             tracking,
             ct,

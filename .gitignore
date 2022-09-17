@@ -11,3 +11,8 @@ test-hqc.key
 *.png
 *.csv
 *.pdf
+*.fls
+*.aux
+*.fdb_latexmk
+*.synctex.gz
+*.pgf

@@ -25,7 +25,7 @@ do
                 echo "Launching: $CMD"
                 ($CMD 2>&1 | tee $LOGFILE | grep -v -E 'DEBUG|INFO') &
                 let live=live+1
-                if [[ $live > 4 ]];
+                if [[ $live > 3 ]];
                 then
                     # wait for first job to return so we can start the next
                     wait -n -p id || { echo 'Command failed, aborting script'; exit 1; }

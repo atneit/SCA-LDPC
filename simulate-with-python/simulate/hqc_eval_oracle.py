@@ -54,7 +54,12 @@ def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
     ctymod = modify_beyond_correction_limit(HQC, rng, ctnmod)
 
     profiling_diff = 0
-
+    
+    logger.info(
+        f"Doing {NUM_PROFILING} decapsulations for warmup"
+    )
+    oracle(HQC, ctnmod, priv, NUM_PROFILING)
+    
     while profiling_diff <= 0:
         profile_time_nmod = None
         profile_time_ymod = None

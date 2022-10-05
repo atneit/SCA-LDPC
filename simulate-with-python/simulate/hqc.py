@@ -10,7 +10,7 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = "simulate"
 
 from collections import Counter
-from math import prod
+from math import isnan, prod
 from random import random
 from typing import Tuple, Union
 import pickle
@@ -244,12 +244,17 @@ class HqcSimulationTracking:
 
     def decoder_stats_data_frame(self, label="", write_header=True):
         static_columns = ["label", "alg", "weight", "epsilon0", "epsilon1"]
+        ep0 = self.params.EPSILON[0]
+        ep1 = self.params.EPSILON[1]
+        # if ep0 == 1.0 and ep1 == 1.0: # commented out: we want
+        #     ep0 = "miss-use"
+        #     ep1 = "miss-use"
         static_values = [
             label,
             self.params.HQC.name(),
             self.params.WEIGHT,
-            self.params.EPSILON[0],
-            self.params.EPSILON[1],
+            ep0,
+            ep1,
         ]
         df = pd.DataFrame.from_dict(self.decoder_stats)
         dynamic_columns = list(df.columns)
@@ -993,13 +998,17 @@ def simulate_hqc_idealized_oracle(
     if error_rate > 0.0:
         SingletonAssertDecodingFailure().raise_exception = False
     noise_level = 1.0 - error_rate
-    params = HqcSimulationParams(
-        HQC=Hqc128,
-        OUTER_DECODING_LIMIT=15,
-        EPSILON=(
+    if isnan(error_rate):
+        epsilon = (1.0, 1.0)
+    else:
+        epsilon = (
             0.9942 * noise_level,
             1.0 * noise_level,
         ),  # HQC ideal decoding oracle multiplied with measurement noise level
+    params = HqcSimulationParams(
+        HQC=Hqc128,
+        OUTER_DECODING_LIMIT=15,
+        EPSILON=epsilon,
         DECODE_EVERY=decode_every,
         WEIGHT=weight,
     )

@@ -1,3 +1,5 @@
+GRID_WEIGHTS = False
+
 import logging
 
 # Disable debug logs for matplotlib (very verbose)
@@ -41,7 +43,9 @@ sns.set_theme(
 rootlogger.setLevel(origlevel)
 
 
-def plt_write(outputname="output.pgf", w=4.8, h=4):
+def plt_write(outputname="output.pgf"):
+    w=4.8
+    h=w if GRID_WEIGHTS else 2
     plt.gcf().set_size_inches(w=w, h=h)
     plt.tight_layout()
     plt.savefig(outputname, bbox_inches="tight")
@@ -69,7 +73,7 @@ def wide_to_long_format(df: pd.DataFrame):
         ]:
             new_df = extract_pair(df, meta_col, new_df, old_stride, old_count)
 
-    to_convert = ["label", "alg", "stride_type", "count_type", "success"]
+    to_convert = ["label", "alg", "stride_type", "count_type", "success", "epsilon0", "epsilon1"]
     new_df[to_convert] = new_df[to_convert].astype("category")
     to_convert = ["weight", "stride", "count"]
     new_df[to_convert] = new_df[to_convert].astype("int")
@@ -104,8 +108,6 @@ def load_data(csv_file):
     df = round_stride_of_type(df, "oracle_calls", 500)
     df = round_stride_of_type(df, "unsatisfied", 20)
 
-    logger.info(f"Data:\n{df}")
-
     return df
 
 
@@ -129,10 +131,18 @@ def rename_human_readable(df):
         }
     )
 
+    df["epsilon0"] = df["epsilon0"].cat.rename_categories(
+        {
+            "0.9444899999999999": "0.94449",
+            "0.9892289999999999": "0.98923",
+            "miss-use": "1.0"
+        }
+    )
+
     df = df.rename(
         columns={
-            "epsilon0": "$\epsilon_0$",
-            "epsilon1": "$\epsilon$",
+            "epsilon0": r"$\rho$",
+            "epsilon1": r"$\rho_1$",
         }
     )
 
@@ -160,8 +170,9 @@ class Plotter:
         self.logger.info("Plotting the graph...")
         self.plot(df)
 
-        self.logger.info("Writing the graph to its destination: " + outputname)
-        plt_write(outputname)
+        if outputname:
+            self.logger.info("Writing the graph to its destination: " + outputname)
+            plt_write(outputname)
 
     def plot(self, df: pd.DataFrame):
         """To be overridden"""
@@ -174,32 +185,35 @@ class Plotter:
 
 class BoxPlotSuccessChecksVsWeight(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        e = "True" if GRID_WEIGHTS else "epsilon1 == 'miss-use'"
         return df.query(
-            r"`weight` % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+            e + r" and weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        alg = df["alg"].iloc[0]
         g = sns.catplot(
             data=df,
-            x="weight",
-            y="stride",
-            col="$\epsilon$",
-            col_wrap=2,
-            orient="v",
+            x="stride",
+            y="weight",
+            col=r"$\rho$" if GRID_WEIGHTS else None,
+            col_wrap=2 if GRID_WEIGHTS else None,
+            orient="h",
             kind="box",
             dodge=True,
             # order=[1.0, 0.995, 0.95, 0.9],
             palette="cubehelix_r",
+            linewidth=0.1,
+            fliersize=1,
         )
         #g.set_titles("")
-        g.set(ylim=(0, None))
-        g.set_axis_labels("LDPC code column weight", "parity checks")
+        #g.set(xlim=(0, None))
+        g.set_axis_labels("parity checks", "column weight")
 
 class LinePlotChecksRemainingBitFlips(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        w = "weight % 10 == 0" if GRID_WEIGHTS else "weight == 50"
         return df.query(
-            "weight == 50 and stride_type == 'checks' and count_type == 'remaining-flips'"
+            w + r" and stride_type == 'checks' and count_type == 'remaining-flips'"
         )
 
     def plot(self, df: pd.DataFrame):
@@ -209,7 +223,7 @@ class LinePlotChecksRemainingBitFlips(Plotter):
             y="count",
             row="count_type",
             col="stride_type",
-            hue="$\epsilon$",
+            hue=r"$\rho$",
             kind="line",
             palette="colorblind",
         )
@@ -219,33 +233,47 @@ class LinePlotChecksRemainingBitFlips(Plotter):
 
 class BoxPlotSuccessOracleCalls(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        w = "weight % 10 == 0" if GRID_WEIGHTS else "weight == 50"
         return df.query(
-            r"`weight` % 10 == 0 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
+            w + r" and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        desc = df.groupby("$\epsilon$")["stride"].describe()
-        self.logger.info(f"Describe data: \n{desc}")
         g = sns.catplot(
             data=df,
             x="stride",
-            y="$\epsilon$",
-            col="weight",
-            col_wrap=2,
+            y=r"$\rho$",
+            col="weight" if GRID_WEIGHTS else None,
+            col_wrap=2 if GRID_WEIGHTS else None,
             orient="h",
             kind="box",
             # order=[1.0, 0.995, 0.95, 0.9],
             palette="colorblind",
+            linewidth=0.1,
+            fliersize=1,
         )
         #g.set_titles("")
-        g.set(xlim=(0, None))
-        g.set_axis_labels("Oracle calls", "$\epsilon$")
+        #g.set(xlim=(0, None))
+        g.set_axis_labels("Oracle calls", r"$\rho$")
+
+
+class DescribeData(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.query(
+            r"weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        self.logger.info(df)
+        desc = df.groupby([r"$\rho$", "weight", "stride_type"])["stride"].describe()
+        self.logger.info(f"Describe data: \n{desc}")
 
 
 def view_hqc_simulation_csv(csv_file):
 
     df = load_data(csv_file)
 
+    DescribeData(df, None)
     BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
     #LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
     BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")

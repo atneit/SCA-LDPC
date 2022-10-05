@@ -1,5 +1,7 @@
 // This is for the g2p macro
 #![allow(clippy::suspicious_arithmetic_impl)]
+use std::{arch::x86_64::__rdtscp};
+use std::arch::x86_64::__get_cpuid_max;
 use anyhow::Result;
 use log::debug;
 use numpy::PyReadonlyArray2;

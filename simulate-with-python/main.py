@@ -35,6 +35,7 @@ from simulate.decode import (
 from simulate.visualize import view_hqc_simulation_csv
 import simulate.distance_spectrum
 from simulate.hqc import simulate_hqc_idealized_oracle
+from simulate.hqc_eval_oracle import hqc_eval_oracle
 from ldpc import bp_decoder
 from ldpc.codes import rep_code
 import numpy as np
@@ -106,7 +107,8 @@ class Commands(CommandsBase):
             action="store",
             type=float,
             default=0.00,
-            help="The error rate of the simulated binary symmetric channel.",
+            help=("The error rate of the simulated binary symmetric channel. 'NaN' is special"
+            " in that it guarantees no errors even for HQC simulation."),
         )
         error_group.add_argument(
             "--error-file",
@@ -134,6 +136,10 @@ class Commands(CommandsBase):
                 header = False
                 mode = 'a'
             df.to_csv(args.csv_output, mode=mode, index=False, header=header)
+        
+    def command_hqc_eval_oracle(self, args: argparse.Namespace):
+        rng = make_random_state(args.seed)
+        hqc_eval_oracle(rng)
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(
@@ -268,6 +274,7 @@ class Commands(CommandsBase):
         suite.addTest(doctest.DocTestSuite(simulate.decode))
         suite.addTest(doctest.DocTestSuite(simulate.distance_spectrum))
         suite.addTest(doctest.DocTestSuite(simulate.hqc))
+        suite.addTest(doctest.DocTestSuite(simulate.hqc_eval_oracle))
 
         logger.info("Starting tests and disabling further logging output")
         logging.disable(logging.CRITICAL)

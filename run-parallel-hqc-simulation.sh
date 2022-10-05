@@ -7,9 +7,9 @@ live=0
 
 for I in {0..99}
 do 
-    for W in 10 20 30 40 50
+    for W in 10 20 30 40 50 60
     do
-        for E in 0.10 0.05 0.005 0.0
+        for E in nan #0.10 0.05 0.005 0.0
         do 
             LOGFILE="simulation-data/hqc-simulation-E$E-W$W-$I.log"
             CMD="simulate-with-python/main.py hqc_simulate \

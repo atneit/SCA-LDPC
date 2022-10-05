@@ -73,7 +73,7 @@ def wide_to_long_format(df: pd.DataFrame):
         ]:
             new_df = extract_pair(df, meta_col, new_df, old_stride, old_count)
 
-    to_convert = ["label", "alg", "stride_type", "count_type", "success"]
+    to_convert = ["label", "alg", "stride_type", "count_type", "success", "epsilon0", "epsilon1"]
     new_df[to_convert] = new_df[to_convert].astype("category")
     to_convert = ["weight", "stride", "count"]
     new_df[to_convert] = new_df[to_convert].astype("int")
@@ -108,8 +108,6 @@ def load_data(csv_file):
     df = round_stride_of_type(df, "oracle_calls", 500)
     df = round_stride_of_type(df, "unsatisfied", 20)
 
-    logger.info(f"Data:\n{df}")
-
     return df
 
 
@@ -133,10 +131,18 @@ def rename_human_readable(df):
         }
     )
 
+    df["epsilon0"] = df["epsilon0"].cat.rename_categories(
+        {
+            "0.9444899999999999": "0.94449",
+            "0.9892289999999999": "0.98923",
+            "miss-use": "1.0"
+        }
+    )
+
     df = df.rename(
         columns={
-            "epsilon0": r"$\rho_0$",
-            "epsilon1": r"$\rho$",
+            "epsilon0": r"$\rho$",
+            "epsilon1": r"$\rho_1$",
         }
     )
 
@@ -179,13 +185,12 @@ class Plotter:
 
 class BoxPlotSuccessChecksVsWeight(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        e = "True" if GRID_WEIGHTS else "epsilon1 == 1.0"
+        e = "True" if GRID_WEIGHTS else "epsilon1 == 'miss-use'"
         return df.query(
             e + r" and weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        alg = df["alg"].iloc[0]
         g = sns.catplot(
             data=df,
             x="stride",
@@ -201,7 +206,7 @@ class BoxPlotSuccessChecksVsWeight(Plotter):
             fliersize=1,
         )
         #g.set_titles("")
-        g.set(xlim=(0, None))
+        #g.set(xlim=(0, None))
         g.set_axis_labels("parity checks", "column weight")
 
 class LinePlotChecksRemainingBitFlips(Plotter):
@@ -248,7 +253,7 @@ class BoxPlotSuccessOracleCalls(Plotter):
             fliersize=1,
         )
         #g.set_titles("")
-        g.set(xlim=(0, None))
+        #g.set(xlim=(0, None))
         g.set_axis_labels("Oracle calls", r"$\rho$")
 
 
@@ -259,6 +264,7 @@ class DescribeData(Plotter):
         )
 
     def plot(self, df: pd.DataFrame):
+        self.logger.info(df)
         desc = df.groupby([r"$\rho$", "weight", "stride_type"])["stride"].describe()
         self.logger.info(f"Describe data: \n{desc}")
 

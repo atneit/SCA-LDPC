@@ -31,6 +31,10 @@ def modify_beyond_correction_limit(
         ct = toggle_bits_in_v(ct, block_bits, N)
     return ct
 
+def oracle(HQC, ctymod, priv, measure):
+    measurments = HQC.decode_oracle(ctymod, priv, measure)
+    min_1p = sorted(measurments)[measure//100]
+    return min_1p
 
 def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
     # alg selection
@@ -59,7 +63,7 @@ def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
             logger.info(
                 f"Doing {NUM_PROFILING} decapsulations for profiling step. Ciphertext modified: no"
             )
-            profile_time_nmod = HQC.decode_oracle(ctnmod, priv, NUM_PROFILING)
+            profile_time_nmod = oracle(HQC, ctnmod, priv, NUM_PROFILING)
         logger.info(f"Profiling result (nmod): {profile_time_nmod}")
 
         # 2nd profile phase
@@ -67,7 +71,7 @@ def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
             logger.info(
                 f"Doing {NUM_PROFILING} decapsulations for profiling step. Ciphertext modified: yes"
             )
-            profile_time_ymod = HQC.decode_oracle(ctymod, priv, NUM_PROFILING)
+            profile_time_ymod = oracle(HQC, ctymod, priv, NUM_PROFILING)
         logger.info(f"Profiling result (ymod): {profile_time_ymod}")
         profiling_diff = profile_time_nmod - profile_time_ymod
         logger.info(f"Profiling diff nmod - ymod: {profiling_diff}")
@@ -84,7 +88,7 @@ def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
             # add some random noise, enough to cause decoding failure
             ctymod = modify_beyond_correction_limit(HQC, rng, ctnmod)
 
-            new = HQC.decode_oracle(ctymod, priv, measure)
+            new = oracle(HQC, ctymod, priv, measure)
             if new:
                 decision = new >= profiling_threshold
                 expected = False

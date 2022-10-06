@@ -39,9 +39,9 @@ def oracle(HQC, ctymod, priv, measure):
 def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
     # alg selection
     HQC = Hqc128()
-    NUM_PROFILING = 2**14
-    NUM_TRIALS = 100
-    MEASUREMENTS = [2**x for x in range(16)]
+    NUM_PROFILING = 2**18
+    NUM_TRIALS = 1000
+    MEASUREMENTS = [2**x for x in range(18)]
 
     # get keypair
     (pub, priv) = read_or_generate_keypair(HQC, keyfile)
@@ -100,7 +100,8 @@ def hqc_eval_oracle(rng: np.random.RandomState, keyfile=None):
                 correct = float(int(decision == expected))
                 sum += correct
                 results[measure].append(correct)
-                logger.info(f"Oracle attempt {trial} with {measure} measurements outputs {correct}, cumulative: {sum/len(results[measure])}")
+                logger.debug(f"Oracle attempt {trial} with {measure} measurements outputs {correct}, cumulative: {sum/len(results[measure])}")
 
+        logger.info(f"Oracle with {measure} measurements outputs cumulative: {sum/len(results[measure])}")
 
     

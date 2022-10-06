@@ -144,7 +144,7 @@ def hqc_csv_rename_human_readable(df):
             "0.9": r"$\mathcal{O}_{\mathrm{HQC}}^{0.9}$",
             "0.95": r"$\mathcal{O}_{\mathrm{HQC}}^{0.95}$",
             "0.995": r"$\mathcal{O}_{\mathrm{HQC}}^{0.995}$",
-            "1.0": r"$\mathcal{O}_{\mathrm{HQC}}^{I}$",
+            "1.0": r"$\mathcal{O}_{\mathrm{HQC}}^{\mathrm{ideal}}$",
             "miss-use": r"$\mathcal{O}_{\mathrm{HQC}}^{1.0}$",
         }
     )
@@ -277,7 +277,7 @@ class BoxPlotSuccessOracleCalls(Plotter):
 class DescribeData(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.query(
-            r"weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+            r"weight == 50 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
@@ -290,8 +290,8 @@ def view_hqc_simulation_csv(csv_file):
 
     df = load_data(csv_file)
 
-    #DescribeData(df, None)
-    #BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
+    DescribeData(df, None)
+    BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
     # LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
     BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")
 

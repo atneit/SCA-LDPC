@@ -93,7 +93,7 @@ def read_or_generate_keypair(HQC, filename=None):
     return key
 
 
-def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
+def search_distinguishable_plaintext(HQC, rng: np.random.RandomState, target_additional_seedexpansions=3):
     """
     Finds plaintexts by random search that matches the special property of requirering
     the full 6 seed expansions (3 extra over minimum) that is the rejection sampling based timing
@@ -107,8 +107,8 @@ def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
     """
     ptlen = len(HQC.new_plaintext())
     logger.debug(f"plaintext length: {ptlen}")
-    logger.info(
-        "Starting search for plaintext that results in 3 additional seed expansions"
+    logger.debug(
+        f"Starting search for plaintext that results in {target_additional_seedexpansions} additional seed expansions"
     )
     distr = {0: 0, 1: 0, 2: 0, 3: 0}
     for attempt in itertools.count():
@@ -116,9 +116,9 @@ def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
         rejects = HQC.num_rejections(pt)
         additionalseedexpansions = (rejects // 1000) - 3
         distr[additionalseedexpansions] += 1
-        if additionalseedexpansions >= 3:
+        if additionalseedexpansions >= target_additional_seedexpansions:
             logger.debug(f"Seedexpansion distribution: {distr}")
-            logger.info(
+            logger.debug(
                 f"Found plaintext with good timing properties in attempt nmbr {attempt}"
             )
             return pt

@@ -32,7 +32,7 @@ from simulate.decode import (
     simulate_frame_error_rate_rust,
     ErrorsProvider,
 )
-from simulate.visualize import view_hqc_simulation_csv
+from simulate.visualize import view_hqc_oracle_accuracy, view_hqc_simulation_csv
 import simulate.distance_spectrum
 from simulate.hqc import simulate_hqc_idealized_oracle
 from simulate.hqc_eval_oracle import hqc_eval_oracle
@@ -140,6 +140,9 @@ class Commands(CommandsBase):
     def command_hqc_eval_oracle(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
         hqc_eval_oracle(rng)
+        
+    def command_view_hqc_oracle_accuracy(self, args: argparse.Namespace):
+        view_hqc_oracle_accuracy()
 
     def command_test_rust_package(self, args: argparse.Namespace):
         logger.info(

@@ -329,29 +329,53 @@ class OracleAccuracyPlotter(Plotter):
 
 def view_hqc_oracle_accuracy():
 
-    # update 2022-10-26 with HP EliteBook 820-G4 notebook 
+    # update 2022-10-06 with HP EliteBook 820-G4 notebook 
     # with Intel Core i5-7200@2.50GHz and 8Gb RAM running 
     # on Ubuntu 20.04 LTS using 2^18 profiling steps 
     # and 1000 trials. Code version was git commit id e49a035
+    # acc = [
+    #     0.0,
+    #     0.546,
+    #     0.713,
+    #     0.915,
+    #     0.903,
+    #     0.138,
+    #     0.911,
+    #     0.957,
+    #     0.946,
+    #     0.947,
+    #     0.966,
+    #     0.947,
+    #     0.948,
+    #     0.952,
+    #     0.962,
+    #     0.953,
+    #     0.969,
+    #     0.969
+    # ]
+
+    # update 2022-10-07 with HP EliteBook 820-G4 notebook 
+    # with Intel Core i5-7200@2.50GHz and 8Gb RAM running 
+    # on Ubuntu 20.04 LTS using 2^18 profiling steps 
+    # and 1000 trials. Code version was git commit id 00c3c65
     acc = [
         0.0,
-        0.546,
-        0.713,
-        0.915,
-        0.903,
-        0.138,
-        0.911,
-        0.957,
-        0.946,
-        0.947,
-        0.966,
-        0.947,
-        0.948,
-        0.952,
-        0.962,
-        0.953,
-        0.969,
-        0.969
+        0.75,
+        0.936,
+        0.951,
+        0.973,
+        0.979,
+        0.972,
+        0.977,
+        0.98,
+        0.987,
+        0.992,
+        0.996,
+        0.992,
+        0.995,
+        0.99,
+        0.993,
+        0.989
     ]
     N = len(acc)
 

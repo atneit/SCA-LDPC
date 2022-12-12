@@ -274,14 +274,40 @@ class BoxPlotSuccessOracleCalls(Plotter):
         g.set_axis_labels("Oracle calls", "")
 
 
-class DescribeData(Plotter):
+class BoxPlotSuccessParityChecks(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        w = "weight % 10 == 0" if GRID_WEIGHTS else "weight == 50"
         return df.query(
-            r"weight == 50 and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
+            w
+            + r" and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        self.logger.info(df)
+        g = sns.catplot(
+            data=df,
+            x="stride",
+            y=r"$\rho$",
+            col="weight" if GRID_WEIGHTS else None,
+            col_wrap=2 if GRID_WEIGHTS else None,
+            orient="h",
+            kind="box",
+            # order=[1.0, 0.995, 0.95, 0.9],
+            palette="colorblind",
+            linewidth=0.1,
+            fliersize=1,
+        )
+        # g.set_titles("")
+        # g.set(xlim=(0, None))
+        g.set_axis_labels("Parity checks", "")
+
+class DescribeData(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.query(
+            r"weight == 50 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        self.logger.info("\n"+str(df))
         desc = df.groupby([r"$\rho$", "weight", "stride_type"])["stride"].describe()
         self.logger.info(f"Describe data: \n{desc}")
 
@@ -294,6 +320,7 @@ def view_hqc_simulation_csv(csv_file):
     BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
     # LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
     BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")
+    BoxPlotSuccessParityChecks(df, "BoxPlotSuccessParityChecks.pgf")
 
 
 def round_stride_of_type(df, stride_type, multiple_of):
@@ -308,7 +335,7 @@ def round_stride_of_type(df, stride_type, multiple_of):
 
 class OracleAccuracyPlotter(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df[df["Measurements"] >= 64]
+        return df[df["Measurements"] >= 0]
 
     def plot(self, df: pd.DataFrame):
         g = sns.lineplot(

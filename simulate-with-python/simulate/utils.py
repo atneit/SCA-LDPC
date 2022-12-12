@@ -51,11 +51,11 @@ class CommandsBase:
         self._parser = argparse.ArgumentParser()
 
         # What command should execute
-        possible_commands = [
+        possible_commands = sorted([
             command[len(self.PREFIX) :]
             for command in dir(self)
             if self.PREFIX in command
-        ]
+        ])
         self._parser.add_argument(
             "command",
             help="What command should execute? Possible values: "

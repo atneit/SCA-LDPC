@@ -18,7 +18,7 @@ import itertools
 import numpy as np
 from .make_code import make_random_ldpc_parity_check_matrix
 from .utils import make_random_state
-from simulate_rs import Hqc128
+from simulate_rs import Hqc128, Hqc192, Hqc256
 from enum import Enum
 import logging
 from ldpc import bp_decoder
@@ -280,14 +280,14 @@ def next_failure_block(
     The returned ciphertext will have multiple blocks flipped but not block 'block'.
     The ciphertext will successfully decode to the same plaintext.
     """
-    outer_decoding_limit = 15
+    outer_decoding_limit = params.OUTER_DECODING_LIMIT
 
     # Verify starting assumption
     SingletonAssertDecodingFailure().assert_decoding_success(
         True, params, tracking, ct, priv, pt, rng, debug=True
     )
 
-    # First we flip up to 15 blocks that we have already evaluated
+    # First we flip up to OUTER_DECODING_LIMIT blocks that we have already evaluated
     evaluated_blocks = [
         i
         for i in range(params.N1)
@@ -990,6 +990,7 @@ def simulate_hqc_idealized_oracle(
     weight: int,
     keyfile=None,
     error_rate=0.0,
+    param_set="128"
 ):
     """
     Main function for simulating HQC attack
@@ -1005,13 +1006,32 @@ def simulate_hqc_idealized_oracle(
             0.9942 * noise_level,
             1.0 * noise_level,
         ),  # HQC ideal decoding oracle multiplied with measurement noise level
-    params = HqcSimulationParams(
-        HQC=Hqc128,
-        OUTER_DECODING_LIMIT=15,
-        EPSILON=epsilon,
-        DECODE_EVERY=decode_every,
-        WEIGHT=weight,
-    )
+    if param_set == "128":
+        params = HqcSimulationParams(
+            HQC=Hqc128,
+            OUTER_DECODING_LIMIT=15,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    elif param_set == "192":
+        params = HqcSimulationParams(
+            HQC=Hqc192,
+            OUTER_DECODING_LIMIT=16,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    elif param_set == "256":
+        params = HqcSimulationParams(
+            HQC=Hqc256,
+            OUTER_DECODING_LIMIT=24,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    else:
+        raise NotImplemented(param_set)
     logger.info(f"Params {params}")
 
     tracking = HqcSimulationTracking(params)

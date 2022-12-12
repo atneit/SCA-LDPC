@@ -9,11 +9,13 @@ __license__ = "MIT"
 
 
 import coloredlogs
-#colored logs for the root logger (applies for all imported modules as well)
+
+# colored logs for the root logger (applies for all imported modules as well)
 coloredlogs.install(level="DEBUG", logger=None)
 
 # new logger for this module
 import logging
+
 logger = logging.getLogger(__name__.replace("__", ""))
 
 logger.debug("Importing dependencies...")
@@ -101,14 +103,23 @@ class Commands(CommandsBase):
             type=str,
             help="Add this label to csv output to distinguish multiple runs",
         )
+        parser.add_argument(
+            "--param-set",
+            action="store",
+            type=str,
+            help="Run against the parameter set for this security level. 128, 192 or 256.",
+            default="128",
+        )
         error_group = parser.add_mutually_exclusive_group(required=False)
         error_group.add_argument(
             "--error-rate",
             action="store",
             type=float,
             default=0.00,
-            help=("The error rate of the simulated binary symmetric channel. 'NaN' is special"
-            " in that it guarantees no errors even for HQC simulation."),
+            help=(
+                "The error rate of the simulated binary symmetric channel. 'NaN' is special"
+                " in that it guarantees no errors even for HQC simulation."
+            ),
         )
         error_group.add_argument(
             "--error-file",
@@ -126,21 +137,28 @@ class Commands(CommandsBase):
 
     def command_hqc_simulate(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
-        (_, tracking) = simulate_hqc_idealized_oracle(rng, args.decode_every, args.code_weight, args.key_file, args.error_rate)
+        (_, tracking) = simulate_hqc_idealized_oracle(
+            rng,
+            args.decode_every,
+            args.code_weight,
+            args.key_file,
+            args.error_rate,
+            args.param_set,
+        )
         df = tracking.decoder_stats_data_frame(label=args.label)
         logger.info(f"Stats: \n{df.to_string(index=False)}")
         if args.csv_output:
             header = True
-            mode = 'w'
+            mode = "w"
             if exists(args.csv_output):
                 header = False
-                mode = 'a'
+                mode = "a"
             df.to_csv(args.csv_output, mode=mode, index=False, header=header)
-        
+
     def command_hqc_eval_oracle(self, args: argparse.Namespace):
         rng = make_random_state(args.seed)
         hqc_eval_oracle(rng)
-        
+
     def command_view_hqc_oracle_accuracy(self, args: argparse.Namespace):
         view_hqc_oracle_accuracy()
 

@@ -27,12 +27,12 @@ do
             then
                 echo "Launching: $CMD"
                 ($CMD 2>&1 | tee $LOGFILE | grep -v -E 'DEBUG|INFO') &
-                let live=live+1
+                let live=live+1 || true
                 if [[ $live > 0 ]];
                 then
                     # wait for first job to return so we can start the next
                     wait -n -p id || { echo 'Command failed, aborting script'; exit 1; }
-                    let live=live-1
+                    let live=live-1 || true
                     echo "$id finished ($live remaining)"
                 fi
             else

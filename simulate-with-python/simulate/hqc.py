@@ -1025,7 +1025,7 @@ def simulate_hqc_idealized_oracle(
     elif param_set == "256":
         params = HqcSimulationParams(
             HQC=Hqc256,
-            OUTER_DECODING_LIMIT=24,
+            OUTER_DECODING_LIMIT=29,
             EPSILON=epsilon,
             DECODE_EVERY=decode_every,
             WEIGHT=weight,

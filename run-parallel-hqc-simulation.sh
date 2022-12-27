@@ -5,7 +5,7 @@ set -o pipefail
 
 live=0
 
-param_set="192"
+param_set="256"
 
 for I in {0..99}
 do 

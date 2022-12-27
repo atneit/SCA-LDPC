@@ -182,7 +182,9 @@ class Commands(CommandsBase):
         logger.info(f"Constructed a rate {rate} code")
 
     def command_view_hqc_simulation_csv(self, args: argparse.Namespace):
-        view_hqc_simulation_csv(args.csv_output)
+        p = args.param_set
+        alg = "Hqc" + p
+        view_hqc_simulation_csv(args.csv_output, alg)
 
     def command_regular_ldpc_code(self, args: argparse.Namespace):
         logger.info(

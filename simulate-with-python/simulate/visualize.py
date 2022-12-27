@@ -44,8 +44,8 @@ rootlogger.setLevel(origlevel)
 
 
 def plt_write(outputname="output.pgf"):
-    w=4.8
-    h=w if GRID_WEIGHTS else 2
+    w = 4.8
+    h = w #if GRID_WEIGHTS else 2
     plt.gcf().set_size_inches(w=w, h=h)
     plt.tight_layout()
     plt.savefig(outputname, bbox_inches="tight")
@@ -73,7 +73,15 @@ def wide_to_long_format(df: pd.DataFrame):
         ]:
             new_df = extract_pair(df, meta_col, new_df, old_stride, old_count)
 
-    to_convert = ["label", "alg", "stride_type", "count_type", "success", "epsilon0", "epsilon1"]
+    to_convert = [
+        "label",
+        "alg",
+        "stride_type",
+        "count_type",
+        "success",
+        "epsilon0",
+        "epsilon1",
+    ]
     new_df[to_convert] = new_df[to_convert].astype("category")
     to_convert = ["weight", "stride", "count"]
     new_df[to_convert] = new_df[to_convert].astype("int")
@@ -111,7 +119,7 @@ def load_data(csv_file):
     return df
 
 
-def rename_human_readable(df):
+def hqc_csv_rename_human_readable(df):
     df = df.copy()
     df["stride_type"] = df["stride_type"].cat.rename_categories(
         {
@@ -131,13 +139,17 @@ def rename_human_readable(df):
         }
     )
 
-    df["epsilon0"] = df["epsilon0"].cat.rename_categories(
-        {
-            "0.9444899999999999": "0.94449",
-            "0.9892289999999999": "0.98923",
-            "miss-use": "1.0"
-        }
-    )
+    cat_mapping = {
+        "0.89478": r"$\mathcal{O}_{\mathrm{HQC}}^{0.9}$",
+        "0.9444899999999999": r"$\mathcal{O}_{\mathrm{HQC}}^{0.95}$",
+        "0.9892289999999999": r"$\mathcal{O}_{\mathrm{HQC}}^{0.995}$",
+        "0.9942": r"$\mathcal{O}_{\mathrm{HQC}}^{\mathrm{ideal}}$",
+        "1.0": r"$\mathcal{O}_{\mathrm{HQC}}^{1.0}$",
+        "miss-use": r"$\mathcal{O}_{\mathrm{HQC}}^{1.0}$",
+    }
+
+    df["epsilon0"] = df["epsilon0"].map(cat_mapping).astype('category')
+    df["epsilon0"] = df["epsilon0"].cat.set_categories(list(cat_mapping.values())[:-1], ordered=True)
 
     df = df.rename(
         columns={
@@ -165,7 +177,7 @@ class Plotter:
         df = self.filter_data(df)
 
         self.logger.info("Make categories human readable...")
-        df = rename_human_readable(df)
+        df = self.rename_human_readable(df)
 
         self.logger.info("Plotting the graph...")
         self.plot(df)
@@ -182,13 +194,18 @@ class Plotter:
         """To be overridden"""
         pass
 
+    def rename_human_readable(self, df):
+        """May be overriden"""
+        return hqc_csv_rename_human_readable(df)
+
 
 class BoxPlotSuccessChecksVsWeight(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        e = "True" if GRID_WEIGHTS else "epsilon1 == 'miss-use'"
-        return df.query(
-            e + r" and weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
-        )
+        e = "True" if GRID_WEIGHTS else "(epsilon1 == 'miss-use' or (epsilon1 == '1.0' and epsilon0 == '1.0'))"
+        query = e + r" and weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+        self.logger.debug("running query: " + query)
+        self.logger.debug("data frame to filter: \n" + str(df))
+        return df.query(query)
 
     def plot(self, df: pd.DataFrame):
         g = sns.catplot(
@@ -197,6 +214,7 @@ class BoxPlotSuccessChecksVsWeight(Plotter):
             y="weight",
             col=r"$\rho$" if GRID_WEIGHTS else None,
             col_wrap=2 if GRID_WEIGHTS else None,
+            row="alg",
             orient="h",
             kind="box",
             dodge=True,
@@ -205,9 +223,10 @@ class BoxPlotSuccessChecksVsWeight(Plotter):
             linewidth=0.1,
             fliersize=1,
         )
-        #g.set_titles("")
-        #g.set(xlim=(0, None))
+        # g.set_titles("")
+        # g.set(xlim=(0, None))
         g.set_axis_labels("parity checks", "column weight")
+
 
 class LinePlotChecksRemainingBitFlips(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -235,7 +254,8 @@ class BoxPlotSuccessOracleCalls(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
         w = "weight % 10 == 0" if GRID_WEIGHTS else "weight == 50"
         return df.query(
-            w + r" and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
+            w
+            + r" and stride_type == 'oracle_calls' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
@@ -245,6 +265,7 @@ class BoxPlotSuccessOracleCalls(Plotter):
             y=r"$\rho$",
             col="weight" if GRID_WEIGHTS else None,
             col_wrap=2 if GRID_WEIGHTS else None,
+            row="alg",
             orient="h",
             kind="box",
             # order=[1.0, 0.995, 0.95, 0.9],
@@ -252,31 +273,61 @@ class BoxPlotSuccessOracleCalls(Plotter):
             linewidth=0.1,
             fliersize=1,
         )
-        #g.set_titles("")
-        #g.set(xlim=(0, None))
-        g.set_axis_labels("Oracle calls", r"$\rho$")
+        # g.set_titles("")
+        # g.set(xlim=(0, None))
+        g.set_axis_labels("Oracle calls", "")
 
+
+class BoxPlotSuccessParityChecks(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        w = "weight % 10 == 0" if GRID_WEIGHTS else "weight == 50"
+        return df.query(
+            w
+            + r" and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+        )
+
+    def plot(self, df: pd.DataFrame):
+        g = sns.catplot(
+            data=df,
+            x="stride",
+            y=r"$\rho$",
+            col="weight" if GRID_WEIGHTS else None,
+            col_wrap=2 if GRID_WEIGHTS else None,
+            row="alg",
+            orient="h",
+            kind="box",
+            # order=[1.0, 0.995, 0.95, 0.9],
+            palette="colorblind",
+            linewidth=0.1,
+            fliersize=1,
+        )
+        # g.set_titles("")
+        # g.set(xlim=(0, None))
+        g.set_axis_labels("Parity checks", "")
 
 class DescribeData(Plotter):
     def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.query(
-            r"weight % 10 == 0 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
+            r"weight == 50 and stride_type == 'checks' and count_type == 'remaining-flips' and success == True"
         )
 
     def plot(self, df: pd.DataFrame):
-        self.logger.info(df)
-        desc = df.groupby([r"$\rho$", "weight", "stride_type"])["stride"].describe()
+        self.logger.info("\n"+str(df))
+        desc = df.groupby(["alg", r"$\rho$", "weight", "stride_type"])["stride"].describe()
         self.logger.info(f"Describe data: \n{desc}")
 
 
-def view_hqc_simulation_csv(csv_file):
+def view_hqc_simulation_csv(csv_file, alg):
 
     df = load_data(csv_file)
+    #logger.info("Filtering data to alg: " + alg)
+    #df = df[df['alg'] == alg]
 
     DescribeData(df, None)
     BoxPlotSuccessChecksVsWeight(df, "BoxPlotSuccessChecksVsWeight.pgf")
-    #LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
+    # LinePlotChecksRemainingBitFlips(df, "LinePlotChecksRemainingBitFlips.pgf")
     BoxPlotSuccessOracleCalls(df, "BoxPlotSuccessOracleCalls.pgf")
+    BoxPlotSuccessParityChecks(df, "BoxPlotSuccessParityChecks.pgf")
 
 
 def round_stride_of_type(df, stride_type, multiple_of):
@@ -287,3 +338,87 @@ def round_stride_of_type(df, stride_type, multiple_of):
         * multiple_of
     )
     return df
+
+
+class OracleAccuracyPlotter(Plotter):
+    def filter_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[df["Measurements"] >= 0]
+
+    def plot(self, df: pd.DataFrame):
+        g = sns.lineplot(
+            data=df, x="Measurements", y="Accuracy", palette="colorblind"
+        )
+        g.axes.set_xscale("log", base=2)
+        g.set(ylim=(0.9, 1.0))
+        
+        # ax2 = g.axes.twinx() # create a second y axis
+        # ax2.set_yticks([0.90, 0.95])
+        # ax2.set_yticklabels([r"$\mathcal{O}_{\mathrm{HQC}}^{0.9}$", r"$\mathcal{O}_{\mathrm{HQC}}^{0.95}$"])
+        # ax2.set(ylim=(0.8, 0.95))
+
+    def rename_human_readable(self, df):
+        """NOOP"""
+        return df
+
+
+def view_hqc_oracle_accuracy():
+
+    # update 2022-10-06 with HP EliteBook 820-G4 notebook 
+    # with Intel Core i5-7200@2.50GHz and 8Gb RAM running 
+    # on Ubuntu 20.04 LTS using 2^18 profiling steps 
+    # and 1000 trials. Code version was git commit id e49a035
+    # acc = [
+    #     0.0,
+    #     0.546,
+    #     0.713,
+    #     0.915,
+    #     0.903,
+    #     0.138,
+    #     0.911,
+    #     0.957,
+    #     0.946,
+    #     0.947,
+    #     0.966,
+    #     0.947,
+    #     0.948,
+    #     0.952,
+    #     0.962,
+    #     0.953,
+    #     0.969,
+    #     0.969
+    # ]
+
+    # update 2022-10-07 with HP EliteBook 820-G4 notebook 
+    # with Intel Core i5-7200@2.50GHz and 8Gb RAM running 
+    # on Ubuntu 20.04 LTS using 2^18 profiling steps 
+    # and 1000 trials. Code version was git commit id 00c3c65
+    acc = [
+        0.0,
+        0.75,
+        0.936,
+        0.951,
+        0.973,
+        0.979,
+        0.972,
+        0.977,
+        0.98,
+        0.987,
+        0.992,
+        0.996,
+        0.992,
+        0.995,
+        0.99,
+        0.993,
+        0.989
+    ]
+    N = len(acc)
+
+    df = pd.DataFrame(
+        {
+            "Measurements": [2**x for x in range(N)],
+            "Accuracy":  acc,
+            "Legend": ["experiment"] * N 
+        }
+    )
+
+    OracleAccuracyPlotter(df, "OracleAccuracy.pgf")

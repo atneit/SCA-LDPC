@@ -18,7 +18,7 @@ import itertools
 import numpy as np
 from .make_code import make_random_ldpc_parity_check_matrix
 from .utils import make_random_state
-from simulate_rs import Hqc128
+from simulate_rs import Hqc128, Hqc192, Hqc256
 from enum import Enum
 import logging
 from ldpc import bp_decoder
@@ -93,7 +93,7 @@ def read_or_generate_keypair(HQC, filename=None):
     return key
 
 
-def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
+def search_distinguishable_plaintext(HQC, rng: np.random.RandomState, target_additional_seedexpansions=3):
     """
     Finds plaintexts by random search that matches the special property of requirering
     the full 6 seed expansions (3 extra over minimum) that is the rejection sampling based timing
@@ -107,8 +107,8 @@ def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
     """
     ptlen = len(HQC.new_plaintext())
     logger.debug(f"plaintext length: {ptlen}")
-    logger.info(
-        "Starting search for plaintext that results in 3 additional seed expansions"
+    logger.debug(
+        f"Starting search for plaintext that results in {target_additional_seedexpansions} additional seed expansions"
     )
     distr = {0: 0, 1: 0, 2: 0, 3: 0}
     for attempt in itertools.count():
@@ -116,9 +116,9 @@ def search_distinguishable_plaintext(HQC, rng: np.random.RandomState):
         rejects = HQC.num_rejections(pt)
         additionalseedexpansions = (rejects // 1000) - 3
         distr[additionalseedexpansions] += 1
-        if additionalseedexpansions >= 3:
+        if additionalseedexpansions >= target_additional_seedexpansions:
             logger.debug(f"Seedexpansion distribution: {distr}")
-            logger.info(
+            logger.debug(
                 f"Found plaintext with good timing properties in attempt nmbr {attempt}"
             )
             return pt
@@ -280,14 +280,14 @@ def next_failure_block(
     The returned ciphertext will have multiple blocks flipped but not block 'block'.
     The ciphertext will successfully decode to the same plaintext.
     """
-    outer_decoding_limit = 15
+    outer_decoding_limit = params.OUTER_DECODING_LIMIT
 
     # Verify starting assumption
     SingletonAssertDecodingFailure().assert_decoding_success(
         True, params, tracking, ct, priv, pt, rng, debug=True
     )
 
-    # First we flip up to 15 blocks that we have already evaluated
+    # First we flip up to OUTER_DECODING_LIMIT blocks that we have already evaluated
     evaluated_blocks = [
         i
         for i in range(params.N1)
@@ -990,6 +990,7 @@ def simulate_hqc_idealized_oracle(
     weight: int,
     keyfile=None,
     error_rate=0.0,
+    param_set="128"
 ):
     """
     Main function for simulating HQC attack
@@ -1005,13 +1006,32 @@ def simulate_hqc_idealized_oracle(
             0.9942 * noise_level,
             1.0 * noise_level,
         ),  # HQC ideal decoding oracle multiplied with measurement noise level
-    params = HqcSimulationParams(
-        HQC=Hqc128,
-        OUTER_DECODING_LIMIT=15,
-        EPSILON=epsilon,
-        DECODE_EVERY=decode_every,
-        WEIGHT=weight,
-    )
+    if param_set == "128":
+        params = HqcSimulationParams(
+            HQC=Hqc128,
+            OUTER_DECODING_LIMIT=15,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    elif param_set == "192":
+        params = HqcSimulationParams(
+            HQC=Hqc192,
+            OUTER_DECODING_LIMIT=16,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    elif param_set == "256":
+        params = HqcSimulationParams(
+            HQC=Hqc256,
+            OUTER_DECODING_LIMIT=29,
+            EPSILON=epsilon,
+            DECODE_EVERY=decode_every,
+            WEIGHT=weight,
+        )
+    else:
+        raise NotImplemented(param_set)
     logger.info(f"Params {params}")
 
     tracking = HqcSimulationTracking(params)

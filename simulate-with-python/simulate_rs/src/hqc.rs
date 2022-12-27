@@ -170,6 +170,34 @@ macro_rules! register_py_hqc_class {
                     v.as_slice().to_vec(),
                 ))
             }
+
+            #[staticmethod]
+            fn decode_oracle<'p>(
+                ciphertext: Vec<u8>,
+                secretkey: &[u8],
+                num_measurements: u64,
+            ) -> Result<Vec<u64>> {
+                let mut ct = <HQC as Kem>::Ciphertext::new();
+                let mut sk = <HQC as Kem>::SecretKey::new();
+                let mut ss = <HQC as Kem>::SharedSecret::new();
+                ct.as_mut_slice().copy_from_slice(&ciphertext);
+                sk.as_mut_slice().copy_from_slice(secretkey);
+                
+                Ok((0..num_measurements).filter_map(|_|{
+                    let mut cpu_core_ident_start = 0u32;
+                    let mut cpu_core_ident_stop = 0u32;
+                    let _ = unsafe { __get_cpuid_max(0) }; //Serializing instruction
+                    let start = unsafe { __rdtscp(&mut cpu_core_ident_start) };
+                    let _ = HQC::decaps(&mut ct, &mut ss, &mut sk); // ignore decapsulation errors
+                    let _ = unsafe { __get_cpuid_max(0) }; //Serializing instruction
+                    let stop = unsafe { __rdtscp(&mut cpu_core_ident_stop) };
+                    if cpu_core_ident_start == cpu_core_ident_stop {
+                        Some(stop - start) // same cpuid, probably no context switch
+                    } else {
+                        None // different cpuid, probably due to context switch, we discard the measurement
+                    }
+                }).collect())
+            }
         }
 
         $m.add_class::<$hqcver>()?;

@@ -1,5 +1,5 @@
 # Improved Side-Channels using Soft Decoding
-This is some code for simulating the performance of using soft decoding techniques for improving side channel attacks (SCA) on the Fujisaka Okomoto transform (FO) on Post Quantum Cryptography primitives (PQC).
+This is some code for simulating the performance of using soft decoding techniques for improving side channel attacks (SCA) on the Fujisaka Okomoto transform (FO) on Post Quantum Cryptography primitives (PQC). This code accompanies the paper "SCA-LDPC: A Code-Based Framework for Key-Recovery Side-Channel Attacks on Post-quantum Encryption Schemes" (https://link.springer.com/chapter/10.1007/978-981-99-8730-6_7)
 
 ## Running python scripts
  Before running the script `main.py` please ensure that you are running in a virtual environment by executing

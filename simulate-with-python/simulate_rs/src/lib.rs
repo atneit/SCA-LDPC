@@ -50,34 +50,10 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
         }
     );
 
-    // Kyber block of 256 coefficients
-    register_py_decoder_special_class!(
-        m <= DecoderN512R256V2C3B4 {
-            N: 512,
-            R: 256,
-            DV: 2,
-            DC: 3,
-            B: 2,
-            BSUM: 4
-        }
-    );
-
-    // Full Kyber-768, sum_weight = 3
-    register_py_decoder_special_class!(
-        m <= DecoderN1024R256SW3 {
-            N: 1024,
-            R: 256,
-            DV: 1,
-            DC: 4,
-            B: 2,
-            BSUM: 6
-        }
-    );
-
-    // Full Kyber-768, sum_weight = 6
+    // Full Kyber-768, sum_weight = 6, check_blocks = 1
     register_py_decoder_special_class!(
         m <= DecoderN1024R256SW6 {
-            N: 1024,
+            N: 1024, // 768 + check_blocks*256
             R: 256,
             DV: 2,
             DC: 7,
@@ -86,30 +62,18 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
         }
     );
 
-    // Full Kyber-768, sum_weight = 9
+    // Full Kyber-768, sum_weight = 6, check_blocks = 2
     register_py_decoder_special_class!(
-        m <= DecoderN1024R256SW9 {
-            N: 1024,
-            R: 256,
-            DV: 3,
-            DC: 10,
+        m <= DecoderN1280R512SW6 {
+            N: 1280,
+            R: 512,
+            DV: 4,
+            DC: 7,
             B: 2,
-            BSUM: 18
+            BSUM: 12
         }
     );
 
-    // Full Kyber-768, sum_weight = 12
-    register_py_decoder_special_class!(
-        m <= DecoderN1024R256SW12 {
-            N: 1024,
-            R: 256,
-            DV: 4,
-            DC: 13,
-            B: 2,
-            BSUM: 24
-        }
-    );
-    
     register_py_hqc_class!(m <= Hqc128);
     register_py_hqc_class!(m <= Hqc192);
     register_py_hqc_class!(m <= Hqc256);

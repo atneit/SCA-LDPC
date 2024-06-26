@@ -225,6 +225,7 @@ impl From<(Key1D, Key1D)> for Key2D {
 
 struct SimpleDValueIterator<const SW: usize, BType> {
     b: BType,
+    num_ignore: usize,
     d_values: Option<[BType; SW]>,
 }
 
@@ -232,25 +233,31 @@ impl<const SW: usize, BType> SimpleDValueIterator<SW, BType>
 where
     BType: Copy + Integer + Signed + AddAssign + NumCast,
 {
-    fn new(b: BType) ->  SimpleDValueIterator<SW, BType> {
+    fn new(b: BType, num_ignore: usize) -> SimpleDValueIterator<SW, BType> {
+        assert!(num_ignore <= SW, "num_ignore must be less than or equal to SW");
         Self {
             b,
+            num_ignore,
             d_values: None,
         }
     }
 
     fn increment_d_values(&mut self) -> bool {
         if let Some(ref mut d_values) = self.d_values {
-            for d_val in d_values.iter_mut(){
-                if *d_val < self.b {
-                    *d_val += BType::from(1_usize).unwrap();
+            for i in 0..(SW - self.num_ignore) {
+                if d_values[i] < self.b {
+                    d_values[i] += BType::from(1_usize).unwrap();
                     return true;
                 }
-                *d_val = -self.b;
+                d_values[i] = -self.b;
             }
             false
         } else {
-            self.d_values = Some([-self.b; SW]);
+            let mut initial_values = [-self.b; SW];
+            for i in (SW - self.num_ignore)..SW {
+                initial_values[i] = BType::zero();
+            }
+            self.d_values = Some(initial_values);
             true
         }
     }
@@ -485,17 +492,8 @@ where
             }
         }
 
+        // ::log::info!("Decoder has the following parameters:\n vn={:?}\n\n\n vnsum={:?}\n\n\n cn={:?} \n\n\n edges={:?} \n\n\n edgessum={:?}", vn, vnsum, self.cn, edges, edgessum);
         // ::log::info!("Decoder has the following parameters:\n vn={:?}\n\n\n vnsum={:?}\n\n\n cn={:?} \n\n\n edges={:?} \n\n\n edgessum={:?}", vn[0], vnsum[0], self.cn[0], edges.iter().next(), edgessum.iter().next());
-
-        // let mut d_values_iter = SimpleDValueIterator::<3, BType>::new(BType::from(B).unwrap());
-        // while let Some(d_values) = d_values_iter.next() {
-        //     let mut dsum = BType::zero();
-        //     for d in d_values.iter() {
-        //         dsum += *d;
-        //     }
-        //     ::log::info!("Configuration {:?}, sum = {:?}", d_values, dsum);
-        // }
-        
 
         let mut it = 0;
         'decoding: loop {
@@ -506,10 +504,16 @@ where
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
             'check_update: for (check_idx, check) in (0..).zip(&self.cn) {
+                // Check nodes in cn are a list of values followed by some amount (potentially 0) of Nones
+                // since the code is not generally regular. We assume check matrix is built as H||I,
+                // therefore, for all check nodes the last non-None value corresponds to I, i.e. check value 
+                let num_nones = check.variable_idx.iter().rev().take_while(|&&x| x.is_none()).count();
+                let num_variable_nodes = SW - num_nones;
+
                 let mut check_iter = check.variables(check_idx);
                 let alpha_i: Vec<&QaryLlrs<BSIZE>> = check_iter
                     .by_ref()
-                    .take(SW)
+                    .take(num_variable_nodes)
                     .map(|key| debug_unwrap!(&edges[&key].v2c.as_ref()))
                     .collect();
                 let alpha_ij_sum: &QaryLlrs<BSUMSIZE> = check_iter
@@ -524,7 +528,7 @@ where
 
                 // ::log::info!("beta_i {:?}, beta_ij_sum = {:?}", beta_i, beta_ij_sum);
                 
-                let mut d_values_iter = SimpleDValueIterator::<SW, BType>::new(BType::from(B).unwrap());
+                let mut d_values_iter = SimpleDValueIterator::<SW, BType>::new(BType::from(B).unwrap(), num_nones);
                 while let Some(d_values) = d_values_iter.next() {
                     let mut d_value_sum = BType::zero();
                     for d in d_values.iter() {
@@ -550,7 +554,7 @@ where
                 }
 
                 let mut check_iter = check.variables(check_idx);
-                for (key, beta_ij) in check_iter.by_ref().take(SW).zip(beta_i) {
+                for (key, beta_ij) in check_iter.by_ref().take(num_variable_nodes).zip(beta_i) {
                     debug_unwrap!(edges.get_mut(&key)).c2v.replace(beta_ij);
                 }
                 debug_unwrap!(edgessum.get_mut(&check_iter.next().unwrap())).c2v.replace(beta_ij_sum);

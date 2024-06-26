@@ -1,8 +1,10 @@
+import logging
+from math import ceil
+
 import numpy as np
 from scipy.linalg import circulant
-from . import utils
-from . import distance_spectrum
-import logging
+
+from . import distance_spectrum, utils
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +70,28 @@ def circular_qary_parity_check_block(
 
 
 def make_qary_qc_parity_check_matrix(
-    block_len: int, column_weight: int, num_blocks: int, rng: np.random.RandomState
+    block_len: int,
+    sum_weight: int,
+    num_blocks: int,
+    rng: np.random.RandomState,
+    check_blocks: int = 1,
 ):
+    column_weight = ceil(sum_weight / num_blocks)
+    if sum_weight % num_blocks == 0:
+        # construct the cyclic blocks, each block of weight column_weight
+        parts = [
+            [
+                circular_qary_parity_check_block(block_len, column_weight, rng)
+                for _ in range(num_blocks)
+            ]
+            for _ in range(check_blocks)
+        ]
+    else:
+        raise NotImplementedError()
 
-    # construct the cyclic blocks
-    parts = [
-        circular_qary_parity_check_block(block_len, column_weight, rng)
-        for _ in range(num_blocks)
-    ]
+    m = np.block(parts)
 
-    # Add identity block
-    parts.append(np.identity(block_len, dtype=int))
-
-    # Flatten into one big matrix
-    return flatten_matrix_parts(parts)
+    return np.concatenate((m, np.identity(block_len * check_blocks, dtype=int)), axis=1)
 
 
 def make_qc_parity_check_matrix(

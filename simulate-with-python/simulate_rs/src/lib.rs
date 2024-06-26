@@ -50,6 +50,17 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
         }
     );
 
+    register_py_decoder_special_class!(
+        m <= DecoderNTRU {
+            N: 8,
+            R: 4,
+            DV: 3,
+            DC: 4,
+            B: 1,
+            BSUM: 3
+        }
+    );
+
     // Full Kyber-768, sum_weight = 6, check_blocks = 1
     register_py_decoder_special_class!(
         m <= DecoderN1024R256SW6 {

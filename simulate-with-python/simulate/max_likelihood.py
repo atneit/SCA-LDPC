@@ -1,34 +1,77 @@
 import itertools as it
 
 
-def pr_cond_yx(y, x, p):
+class BaseOracle:
+    def prob_of(self, expected, actual, pos):
+        raise NotImplementedError()
+
+
+class SimpleOracle:
+    # p: accuracy of oracle
+    def __init__(self, p):
+        self.p = p
+
+    def prob_of(self, expected, actual, pos):
+        if actual == expected:
+            return self.p
+        else:
+            return 1 - self.p
+
+
+class FalsePositiveNegativePositionalOracle:
+    # as input p_arr should be array of tuples, where tuple i contains a pair of probability of false positive and
+    # false negative, resp., for pos == i
+    def __init__(self, p_arr):
+        self.p_arr = p_arr
+
+    def prob_of(self, expected, actual, pos):
+        pr_fp, pr_fn = self.p_arr[pos]
+        if expected == 0:
+            if actual == 1:
+                return pr_fp
+            else:
+                return 1 - pr_fp
+        if expected == 1:
+            if actual == 0:
+                return pr_fn
+            else:
+                return 1 - pr_fn
+
+
+def pr_cond_yx(y, x, pr_oracle):
     # compute Pr[Y = y | X = x]
     res = 1
     for i in range(len(x)):
-        if x[i] == y[i]:
-            res *= p
-        else:
-            res *= 1 - p
+        res *= pr_oracle.prob_of(x[i], y[i], i)
     return res
 
 
-def pr_y(y, p, secret_range_func, coding, distrib_secret, sum_weight):
+def pr_y(y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight):
     # compute Pr[Y = y]
     res = 0
     for s in secret_range_func(sum_weight):
         xprime = coding[s]
-        pr_xprime_y = distrib_secret[s] * pr_cond_yx(y, xprime, p)
+        pr_xprime_y = distrib_secret[s] * pr_cond_yx(y, xprime, pr_oracle)
         res += pr_xprime_y
     return res
 
 
 def pr_cond_xy(
-    s, y, p, secret_range_func, coding, distrib_secret, sum_weight, pr_y_saved=None
+    s,
+    y,
+    pr_oracle,
+    secret_range_func,
+    coding,
+    distrib_secret,
+    sum_weight,
+    pr_y_saved=None,
 ):
     # compute Pr[X = coding[s] | Y = y]
     if pr_y_saved is None:
-        pr_y_saved = pr_y(y, p, secret_range_func, coding, distrib_secret, sum_weight)
-    return pr_cond_yx(y, coding[s], p) * distrib_secret[s] / pr_y_saved
+        pr_y_saved = pr_y(
+            y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
+        )
+    return pr_cond_yx(y, coding[s], pr_oracle) * distrib_secret[s] / pr_y_saved
 
 
 def pr_of_y_from_prediction(pred_y, y):
@@ -42,23 +85,27 @@ def pr_of_y_from_prediction(pred_y, y):
 
 
 def s_distribution_from_hard_y(
-    y, p, secret_range_func, coding, distrib_secret, sum_weight
+    y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
 ):
     distr = [0] * len(coding)
     for i, s in enumerate(secret_range_func(sum_weight)):
+        pr_y_saved = pr_y(
+            y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
+        )
         distr[i] = pr_cond_xy(
             s,
             y,
-            p,
+            pr_oracle,
             secret_range_func,
             coding,
             distrib_secret,
             sum_weight,
-            None,
+            pr_y_saved,
         )
     return distr
 
 
+# TODO: fix *_adaptive with probability oracles
 def pr_cond_yx_adaptive(y, s, p, coding_tree):
     # compute Pr[Y = y | X = e(s)]
     res = 1
@@ -129,16 +176,18 @@ def s_distribution_from_hard_y_adaptive(
 
 
 def s_distribution_from_prediction_y(
-    pred_y, p, secret_range_func, coding, distrib_secret, sum_weight
+    pred_y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
 ):
     distr = [0] * len(secret_range_func(sum_weight))
     for y in it.product(range(2), repeat=len(coding[0])):
-        pr_y_saved = pr_y(y, p, secret_range_func, coding, distrib_secret, sum_weight)
+        pr_y_saved = pr_y(
+            y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
+        )
         for i, s in enumerate(secret_range_func(sum_weight)):
             distr[i] += pr_cond_xy(
                 s,
                 y,
-                p,
+                pr_oracle,
                 secret_range_func,
                 coding,
                 distrib_secret,

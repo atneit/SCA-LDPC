@@ -1,6 +1,9 @@
+import os.path
+import sys
+
 import coloredlogs
 import numpy as np
-from simulate_rs import DecoderNTRU
+from simulate_rs import DecoderNTRU761W2
 
 coloredlogs.install(level="DEBUG", logger=None)
 
@@ -11,6 +14,10 @@ logger = logging.getLogger(__name__.replace("__", ""))
 
 
 def process_file(filename, n):
+    if not os.path.isfile(filename):
+        print("File does not exist")
+        return None, None
+
     with open(filename, "r") as file:
         lines = file.readlines()
 
@@ -39,10 +46,15 @@ def process_file(filename, n):
     return matrix, probability_lists
 
 
+argv = sys.argv
+if len(argv) < 3:
+    print("Usage: <program> <prob_file> <out_file>")
+    exit()
+
 # number of coefficients of f
-p = 4
+p = 761
 # weight of f
-w = 2
+w = 286
 
 # determine the prior distribution of coefficients of f
 f_zero_prob = (p - w) / p
@@ -52,14 +64,18 @@ for _ in range(p):
     secret_variables.append([f_one_prob, f_zero_prob, f_one_prob])
 
 # read posterior distribution of check variables
-filename = "to_be_decoded.txt"
+filename = argv[1]
 H, check_variables = process_file(filename, p)
+if H is None or check_variables is None:
+    exit()
 
 # convert to numpy arrays for Rust be able to work on the arrays
 secret_variables = np.array(secret_variables, dtype=np.float32)
 check_variables = np.array(check_variables, dtype=np.float32)
 
-decoder = DecoderNTRU(H.astype("int8"), 7)
+decoder = DecoderNTRU761W2(H.astype("int8"), 7)
 s_decoded = decoder.min_sum(secret_variables, check_variables)
 
-print(f"Decoded key: {s_decoded[:p]}\nCheck variables: {s_decoded[p:]}")
+with open(argv[2], "wt") as f:
+    print(s_decoded[:p], file=f)
+    print(s_decoded[p:], file=f)

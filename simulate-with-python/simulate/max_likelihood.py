@@ -6,7 +6,7 @@ class BaseOracle:
         raise NotImplementedError()
 
 
-class SimpleOracle:
+class SimpleOracle(BaseOracle):
     # p: accuracy of oracle
     def __init__(self, p):
         self.p = p
@@ -18,7 +18,7 @@ class SimpleOracle:
             return 1 - self.p
 
 
-class FalsePositiveNegativePositionalOracle:
+class FalsePositiveNegativePositionalOracle(BaseOracle):
     # as input p_arr should be array of tuples, where tuple i contains a pair of probability of false positive and
     # false negative, resp., for pos == i
     def __init__(self, p_arr):
@@ -71,6 +71,8 @@ def pr_cond_xy(
         pr_y_saved = pr_y(
             y, pr_oracle, secret_range_func, coding, distrib_secret, sum_weight
         )
+    if pr_y_saved == 0:
+        return 0
     return pr_cond_yx(y, coding[s], pr_oracle) * distrib_secret[s] / pr_y_saved
 
 

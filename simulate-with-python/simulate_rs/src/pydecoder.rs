@@ -105,14 +105,30 @@ macro_rules! register_py_decoder_special_class {
                     BSUM = $BSUM,
                     shape = py_parity_check.shape()
                 );
-                let mut parity_check = [[0; $N]; $R];
-                for row in 0..parity_check.len() {
-                    for col in 0..parity_check[row].len() {
-                        parity_check[row][col] = py_parity_check[(row, col)];
-                    }
+                // let mut parity_check = [[0; $N]; $R];
+                // for row in 0..parity_check.len() {
+                //     for col in 0..parity_check[row].len() {
+                //         parity_check[row][col] = py_parity_check[(row, col)];
+                //     }
+                // }
+                // let parity_check: Box<[Box<[i8]>]> = Box::new(
+                //     (0..$R)
+                //         .map(|row_idx| {
+                //             let row = py_parity_check.slice(ndarray::s![row_idx, ..]);
+                //             let row_vec: Vec<i8> = row.to_vec();
+                //             Box::new(row_vec.into_boxed_slice())
+                //         })
+                //         .collect()
+                // );
+                let mut parity_check: Vec<Box<[i8]>> = Vec::with_capacity($R);
+                
+                for row in py_parity_check.outer_iter() {
+                    let vec_row: Vec<i8> = row.to_vec();
+                    let boxed_row: Box<[i8]> = vec_row.into_boxed_slice();
+                    parity_check.push(boxed_row);
                 }
                 Ok($Name {
-                    decoder: DecoderSpecial::new(parity_check, iterations),
+                    decoder: DecoderSpecial::new(parity_check.into_boxed_slice(), iterations),
                 })
             }
 

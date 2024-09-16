@@ -37,7 +37,7 @@ macro_rules! debug_unwrap {
 #[derive(Debug, Clone)]
 struct VariableNode<const DV: usize, const B: usize> {
     /// options to deal with irregular codes
-    check_idx: [Option<Key1D>; DV],
+    check_idx: Box<[Option<Key1D>]>,
     /// The a-priory channel value
     channel: Option<QaryLlrs<B>>,
 }
@@ -45,7 +45,7 @@ struct VariableNode<const DV: usize, const B: usize> {
 impl<const DV: usize, const B: usize> Default for VariableNode<DV, B> {
     fn default() -> Self {
         Self {
-            check_idx: [None; DV],
+            check_idx: vec![None; DV].into_boxed_slice(),
             channel: Default::default(),
         }
     }
@@ -61,16 +61,16 @@ impl<const DV: usize, const B: usize> VariableNode<DV, B> {
 }
 
 /// A check node
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CheckNode<const DC: usize> {
     /// options to deal with initialization and irregular codes
-    variable_idx: [Option<Key1D>; DC],
+    variable_idx: Box<[Option<Key1D>]>,
 }
 
 impl<const DC: usize> Default for CheckNode<DC> {
     fn default() -> Self {
         Self {
-            variable_idx: [None; DC],
+            variable_idx: vec![None; DC].into_boxed_slice(),
         }
     }
 }
@@ -311,42 +311,23 @@ pub struct DecoderSpecial<
     /// Messages between BSUM-variables and check nodes
     edgessum: Container2D<Edge<BSUMSIZE>>,
     /// List of B-Variable nodes
-    vn: [VariableNode<DV, BSIZE>; BVARS],
+    vn: Box<[VariableNode<DV, BSIZE>]>,
     /// List of BSUM-Variable nodes
-    vnsum: [VariableNode<1, BSUMSIZE>; R],
+    vnsum: Box<[VariableNode<1, BSUMSIZE>]>,
     /// List of Check nodes, each node contain DC-1 B-variables and 1 BSUM-variable
-    cn: [CheckNode<DC>; R],
+    cn: Box<[CheckNode<DC>]>,
     /// Number of iterations to perform in the decoder    
     max_iter: u32,
     brange: RangeInclusive<BType>,
 }
 
-fn make_default_array<T: Default, const E: usize>() -> [T; E] {
-    // Create an uninitialized array of `MaybeUninit`. The `assume_init` is
-    // safe because the type we are claiming to have initialized here is a
-    // bunch of `MaybeUninit`s, which do not require initialization.
-    let mut data: [MaybeUninit<T>; E] = unsafe { MaybeUninit::uninit().assume_init() };
-    // Initialization is safe. If default() allocates any data and if there is
-    // a panic during this loop, we have a memory leak, but there is no
-    // memory safety issue.
-    for elem in &mut data[..] {
-        elem.write(Default::default());
-    }
-    // Everything is initialized. Transmute the array to the
-    // initialized type.
-    // we want to do the following, but can't until
-    // https://github.com/rust-lang/rust/issues/61956 is fixed
-    //      unsafe { transmute::<[MaybeUninit<T>; E], [T; E]>(data) }
-    //
-    // instead we do the following:
-    // Using &mut as an assertion of unique "ownership"
-    let ptr = &mut data as *mut _ as *mut [T; E];
-    let res = unsafe { ptr.read() };
-    core::mem::forget(data);
-    res
+fn make_default_boxed_array<T: Default + Clone, const E: usize>() -> Box<[T]> {
+    // Create a Vec with default values and convert it to Box<[T]> to allocate on the heap.
+    let data: Vec<T> = vec![T::default(); E];
+    data.into_boxed_slice()
 }
 
-fn insert_first_none<T, const E: usize>(array: &mut [Option<T>; E], value: T) {
+fn insert_first_none<T>(array: &mut [Option<T>], value: T) {
     for el in array {
         if el.is_none() {
             el.insert(value);
@@ -384,7 +365,7 @@ where
     pub const BSUM: isize = BSUM as isize;
     pub const BSUMSIZE: usize = BSUMSIZE;
 
-    pub fn new(parity_check: [[ParCheckType; N]; R], max_iter: u32) -> Self {
+    pub fn new(parity_check: Box<[Box<[ParCheckType]>]>, max_iter: u32) -> Self {
         if (BSUM % B) != 0 {
             panic!(
                 "BSUM ({}) must be multiple of B ({})", BSUM, B
@@ -393,13 +374,14 @@ where
         if BVARS != N-R {
             panic!("BVARS ({}) must be equal to N-R ({})", BVARS, N-R);
         }
-        let vn: RefCell<[VariableNode<DV, BSIZE>; BVARS]> = RefCell::new(make_default_array());
-        let vnsum: RefCell<[VariableNode<1, BSUMSIZE>; R]> = RefCell::new(make_default_array());
-        let cn: RefCell<[CheckNode<DC>; R]> = RefCell::new(make_default_array());
+        let vn: RefCell<Box<[VariableNode<DV, BSIZE>]>> = RefCell::new(make_default_boxed_array::<VariableNode<DV, BSIZE>, BVARS>());
+        let vnsum: RefCell<Box<[VariableNode<1, BSUMSIZE>]>> = RefCell::new(make_default_boxed_array::<VariableNode<1, BSUMSIZE>, R>());
+        let cn: RefCell<Box<[CheckNode<DC>]>> = RefCell::new(make_default_boxed_array::<CheckNode<DC>, R>());
         let edges = RefCell::new(Container2D::default());
         let edgessum = RefCell::new(Container2D::default());
 
-        let parity_check: Container2D<ParCheckType> = IntoIterator::into_iter(parity_check)
+        let parity_check: Container2D<ParCheckType> = parity_check
+            .iter()
             .enumerate()
             .flat_map(|(row_num, row)| {
                 let vn = &vn;
@@ -407,12 +389,12 @@ where
                 let cn = &cn;
                 let edges = &edges;
                 let edgessum = &edgessum;
-                IntoIterator::into_iter(row)
+                row.iter()
                     .enumerate()
                     // Filter out zeroes in the parity check
-                    .filter(|(col_num, h)| *h != 0)
+                    .filter(|(col_num, &h)| h != 0)
                     // Handle the non-zeroes
-                    .map(move |(col_num, h)| {
+                    .map(move |(col_num, &h)| {
                         let ij: Key2D = (row_num, col_num).into();
 
                         
@@ -420,20 +402,20 @@ where
                             // This creates an empty edge (no message in either direction)
                             edgessum.borrow_mut().insert(ij, Default::default());
                             // add the check index to the variable
-                            insert_first_none::<_, 1>(
+                            insert_first_none(
                                 &mut vnsum.borrow_mut()[ij.col() - BVARS].check_idx,
                                 ij.row,
                             );
                         } else {
                             edges.borrow_mut().insert(ij, Default::default());
-                            insert_first_none::<_, DV>(
+                            insert_first_none(
                                 &mut vn.borrow_mut()[ij.col()].check_idx,
                                 ij.row,
                             );
                         }
 
                         // add the variable index to the check
-                        insert_first_none::<_, DC>(
+                        insert_first_none(
                             &mut cn.borrow_mut()[ij.row()].variable_idx,
                             ij.col,
                         );
@@ -503,7 +485,7 @@ where
             // 2. check num iterations
             // noop, we do it at the end of the loop instead
             // 3. Check node update (min)
-            'check_update: for (check_idx, check) in (0..).zip(&self.cn) {
+            'check_update: for (check_idx, check) in (0..).zip(&*self.cn) {
                 // Check nodes in cn are a list of values followed by some amount (potentially 0) of Nones
                 // since the code is not generally regular. We assume check matrix is built as H||I,
                 // therefore, for all check nodes the last non-None value corresponds to I, i.e. check value 
@@ -563,7 +545,7 @@ where
             }
 
             // Variable node update (sum)
-            for (var_idx, var) in (0..).zip(&vn) {
+            for (var_idx, var) in (0..).zip(&*vn) {
                 // Collect connected checks
 
                 // 4.1 primitive messages. Full summation
@@ -588,7 +570,7 @@ where
                     hard_decision[var_idx as usize] = Self::i2b::<B>(Self::arg_min::<BSIZE>(sum));
                 }
             }
-            for (var_idx, var) in ((BVARS as u16)..).zip(&vnsum) {
+            for (var_idx, var) in ((BVARS as u16)..).zip(&*vnsum) {
                 let mut sum: QaryLlrs<BSUMSIZE> = debug_unwrap!(var.channel);
                 for key in var.checks(var_idx) {
                     let incoming = debug_unwrap!(debug_unwrap!(edgessum.get(&key)).c2v);

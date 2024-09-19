@@ -3,7 +3,7 @@ import sys
 
 import coloredlogs
 import numpy as np
-from simulate_rs import DecoderNTRU761W2
+from simulate_rs import DecoderNTRU761W2, DecoderNTRU761W4
 
 coloredlogs.install(level="DEBUG", logger=None)
 
@@ -48,9 +48,12 @@ def process_file(filename, n):
 
 argv = sys.argv
 if len(argv) < 3:
-    print("Usage: <program> <prob_file> <out_file>")
+    print("Usage: <program> <prob_file> <out_file> [<LDPC_iterations>]")
     exit()
 
+iterations = 5
+if len(argv) >= 4:
+    iterations = int(argv[3])
 # number of coefficients of f
 p = 761
 # weight of f
@@ -68,13 +71,23 @@ filename = argv[1]
 H, check_variables = process_file(filename, p)
 if H is None or check_variables is None:
     exit()
+row_counts = np.count_nonzero(H, axis=1)
+max_row_weight = np.max(row_counts)
+col_counts = np.count_nonzero(H, axis=0)
+max_col_weight = np.max(col_counts)
+
+print(len(H), len(H[0]))
+print(max_row_weight, max_col_weight)
 
 # convert to numpy arrays for Rust be able to work on the arrays
 secret_variables = np.array(secret_variables, dtype=np.float32)
 check_variables = np.array(check_variables, dtype=np.float32)
 
-decoder = DecoderNTRU761W2(H.astype("int8"), 7)
+# print("Creating decoder")
+decoder = DecoderNTRU761W4(H.astype("int8"), max_col_weight, max_row_weight, iterations)
+# print("Decoder created, computing min_sum")
 s_decoded = decoder.min_sum(secret_variables, check_variables)
+# print("Done")
 
 with open(argv[2], "wt") as f:
     print(s_decoded[:p], file=f)

@@ -1,5 +1,5 @@
 #![feature(generic_const_exprs)]
-#![allow(unused)]
+#![allow(unused,non_snake_case)]
 
 use anyhow::Result;
 use fastcmp::Compare;
@@ -35,23 +35,30 @@ macro_rules! debug_unwrap {
 
 /// A variable node
 #[derive(Debug, Clone)]
-struct VariableNode<const DV: usize, const B: usize> {
+struct VariableNode<const B: usize> {
     /// options to deal with irregular codes
-    check_idx: Box<[Option<Key1D>]>,
+    check_idx: Vec<Option<Key1D>>,
     /// The a-priory channel value
     channel: Option<QaryLlrs<B>>,
 }
 
-impl<const DV: usize, const B: usize> Default for VariableNode<DV, B> {
+impl<const B: usize> Default for VariableNode<B> {
     fn default() -> Self {
         Self {
-            check_idx: vec![None; DV].into_boxed_slice(),
+            check_idx: Vec::new(),
             channel: Default::default(),
         }
     }
 }
 
-impl<const DV: usize, const B: usize> VariableNode<DV, B> {
+impl<const B: usize> VariableNode<B> {
+    fn new(DV: usize) -> Self {
+        Self {
+            check_idx: vec![None; DV],
+            channel: Default::default(),
+        }
+    }
+
     fn checks(&self, var_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.check_idx
             .iter()
@@ -62,20 +69,26 @@ impl<const DV: usize, const B: usize> VariableNode<DV, B> {
 
 /// A check node
 #[derive(Debug, Clone)]
-struct CheckNode<const DC: usize> {
+struct CheckNode {
     /// options to deal with initialization and irregular codes
-    variable_idx: Box<[Option<Key1D>]>,
+    variable_idx: Vec<Option<Key1D>>,
 }
 
-impl<const DC: usize> Default for CheckNode<DC> {
+impl Default for CheckNode {
     fn default() -> Self {
         Self {
-            variable_idx: vec![None; DC].into_boxed_slice(),
+            variable_idx: Vec::new(),
         }
     }
 }
 
-impl<const DC: usize> CheckNode<DC> {
+impl CheckNode {
+    fn new(DC: usize) -> Self {
+        Self {
+            variable_idx: vec![None; DC],
+        }
+    }
+
     fn variables(&self, check_idx: Key1D) -> impl Iterator<Item = Key2D> + '_ {
         self.variable_idx
             .iter()
@@ -223,28 +236,30 @@ impl From<(Key1D, Key1D)> for Key2D {
     }
 }
 
-struct SimpleDValueIterator<const SW: usize, BType> {
+struct SimpleDValueIterator<BType> {
     b: BType,
     num_ignore: usize,
-    d_values: Option<[BType; SW]>,
+    SW: usize,
+    d_values: Option<Vec<BType>>,
 }
 
-impl<const SW: usize, BType> SimpleDValueIterator<SW, BType>
+impl<BType> SimpleDValueIterator<BType>
 where
     BType: Copy + Integer + Signed + AddAssign + NumCast,
 {
-    fn new(b: BType, num_ignore: usize) -> SimpleDValueIterator<SW, BType> {
+    fn new(b: BType, num_ignore: usize, SW: usize) -> SimpleDValueIterator<BType> {
         assert!(num_ignore <= SW, "num_ignore must be less than or equal to SW");
         Self {
             b,
             num_ignore,
+            SW,
             d_values: None,
         }
     }
 
     fn increment_d_values(&mut self) -> bool {
         if let Some(ref mut d_values) = self.d_values {
-            for i in 0..(SW - self.num_ignore) {
+            for i in 0..(self.SW - self.num_ignore) {
                 if d_values[i] < self.b {
                     d_values[i] += BType::from(1_usize).unwrap();
                     return true;
@@ -253,8 +268,8 @@ where
             }
             false
         } else {
-            let mut initial_values = [-self.b; SW];
-            for i in (SW - self.num_ignore)..SW {
+            let mut initial_values = vec![-self.b; self.SW];
+            for i in (self.SW - self.num_ignore)..self.SW {
                 initial_values[i] = BType::zero();
             }
             self.d_values = Some(initial_values);
@@ -268,7 +283,7 @@ where
         }
 
         match &self.d_values {
-            Some(ref d_values) => Some(&d_values[0..SW]),
+            Some(ref d_values) => Some(&d_values[0..self.SW]),
             None => None,
         }
     }
@@ -292,12 +307,6 @@ type ParCheckType = i8;
 /// BSUM: last R variables from the range [-BSUM, ..., 0, ..., BSUM]
 /// BSUMSIZE: size of range [-BSUM, ..., 0, ..., BSUM], i.e. 2*BSUM+1
 pub struct DecoderSpecial<
-    const N: usize,
-    const R: usize,
-    const BVARS: usize,
-    const SW: usize,
-    const DC: usize,
-    const DV: usize,
     const B: usize,
     const BSIZE: usize,
     const BSUM: usize,
@@ -311,72 +320,70 @@ pub struct DecoderSpecial<
     /// Messages between BSUM-variables and check nodes
     edgessum: Container2D<Edge<BSUMSIZE>>,
     /// List of B-Variable nodes
-    vn: Box<[VariableNode<DV, BSIZE>]>,
+    vn: Vec<VariableNode<BSIZE>>,
     /// List of BSUM-Variable nodes
-    vnsum: Box<[VariableNode<1, BSUMSIZE>]>,
+    vnsum: Vec<VariableNode<BSUMSIZE>>,
     /// List of Check nodes, each node contain DC-1 B-variables and 1 BSUM-variable
-    cn: Box<[CheckNode<DC>]>,
+    cn: Vec<CheckNode>,
     /// Number of iterations to perform in the decoder    
     max_iter: u32,
     brange: RangeInclusive<BType>,
+    DV: usize,
+    DC: usize,
+    N: usize,
+    R: usize,
 }
 
-fn make_default_boxed_array<T: Default + Clone, const E: usize>() -> Box<[T]> {
-    // Create a Vec with default values and convert it to Box<[T]> to allocate on the heap.
-    let data: Vec<T> = vec![T::default(); E];
-    data.into_boxed_slice()
-}
-
-fn insert_first_none<T>(array: &mut [Option<T>], value: T) {
+fn insert_first_none<T>(array: &mut Vec<Option<T>>, value: T) {
     for el in array {
         if el.is_none() {
-            el.insert(value);
+            el.replace(value);
             return;
         }
     }
-    panic!("Reached the end of the array, no more space left!")
+    panic!("Reached the end of the array, no more space left!");
 }
 
 impl<
-        const N: usize,
-        const R: usize,
-        const BVARS: usize,
-        const SW: usize,
-        const DC: usize,
-        const DV: usize,
         const B: usize,
         const BSIZE: usize,
         const BSUM: usize,
         const BSUMSIZE: usize,
         BType,
-    > DecoderSpecial<N, R, BVARS, SW, DC, DV, B, BSIZE, BSUM, BSUMSIZE, BType>
+    > DecoderSpecial<B, BSIZE, BSUM, BSUMSIZE, BType>
 where
 // TODO: remove std::fmt::Debug
     BType: Integer + Signed + NumCast + AddAssign + Copy + FromPrimitive + TryInto<usize> + Default + std::fmt::Debug,
 {
-    pub const N: usize = N;
-    pub const R: usize = R;
-    pub const BVARS: usize = BVARS;
-    pub const SW: usize = SW;
-    pub const DC: usize = DC;
-    pub const DV: usize = DV;
     pub const B: isize = B as isize;
     pub const BSIZE: usize = BSIZE;
     pub const BSUM: isize = BSUM as isize;
     pub const BSUMSIZE: usize = BSUMSIZE;
 
-    pub fn new(parity_check: Box<[Box<[ParCheckType]>]>, max_iter: u32) -> Self {
+    pub fn new(parity_check: Vec<Vec<ParCheckType>>, DV: usize, DC: usize, max_iter: u32) -> Self {
         if (BSUM % B) != 0 {
             panic!(
                 "BSUM ({}) must be multiple of B ({})", BSUM, B
             );
         }
-        if BVARS != N-R {
-            panic!("BVARS ({}) must be equal to N-R ({})", BVARS, N-R);
-        }
-        let vn: RefCell<Box<[VariableNode<DV, BSIZE>]>> = RefCell::new(make_default_boxed_array::<VariableNode<DV, BSIZE>, BVARS>());
-        let vnsum: RefCell<Box<[VariableNode<1, BSUMSIZE>]>> = RefCell::new(make_default_boxed_array::<VariableNode<1, BSUMSIZE>, R>());
-        let cn: RefCell<Box<[CheckNode<DC>]>> = RefCell::new(make_default_boxed_array::<CheckNode<DC>, R>());
+        let R = parity_check.len();
+        let N = parity_check[0].len();
+        let BVARS = N - R;
+
+        let mut vn: Vec<VariableNode<BSIZE>> = (0..BVARS)
+            .map(|_| VariableNode::new(DV))
+            .collect();
+
+        let mut vnsum: Vec<VariableNode<BSUMSIZE>> = (0..R)
+            .map(|_| VariableNode::new(1))
+            .collect();
+
+        let mut cn: Vec<CheckNode> = (0..R)
+            .map(|_| CheckNode::new(DC))
+            .collect();
+        let vn_ref = RefCell::new(vn);
+        let vnsum_ref = RefCell::new(vnsum);
+        let cn_ref = RefCell::new(cn);
         let edges = RefCell::new(Container2D::default());
         let edgessum = RefCell::new(Container2D::default());
 
@@ -384,9 +391,9 @@ where
             .iter()
             .enumerate()
             .flat_map(|(row_num, row)| {
-                let vn = &vn;
-                let vnsum = &vnsum;
-                let cn = &cn;
+                let vn = &vn_ref;
+                let vnsum = &vnsum_ref;
+                let cn = &cn_ref;
                 let edges = &edges;
                 let edgessum = &edgessum;
                 row.iter()
@@ -425,9 +432,9 @@ where
             })
             .collect();
 
-        let mut vn = vn.into_inner();
-        let mut vnsum = vnsum.into_inner();
-        let cn = cn.into_inner();
+        let mut vn = vn_ref.into_inner();
+        let mut vnsum = vnsum_ref.into_inner();
+        let cn = cn_ref.into_inner();
         let edges = edges.into_inner();
         let edgessum = edgessum.into_inner();
 
@@ -442,6 +449,10 @@ where
             edgessum,
             max_iter,
             brange: ((BType::from(-Self::B).unwrap())..=(BType::from(Self::B).unwrap())),
+            DV,
+            DC,
+            N,
+            R,
         }
     }
 
@@ -450,13 +461,16 @@ where
     /// # Safety
     ///
     /// This function is safe to use if it does not panic in debug builds!
-    pub fn min_sum(&self, channel_llr: [QaryLlrs<BSIZE>; BVARS], channel_llr_sum: [QaryLlrs<BSUMSIZE>; R]) -> Result<[BType; N]> {
+    pub fn min_sum(&self, channel_llr: Vec<QaryLlrs<BSIZE>>, channel_llr_sum: Vec<QaryLlrs<BSUMSIZE>>) -> Result<Vec<BType>> {
         // Clone the states that we need to mutate
         let mut vn = self.vn.clone();
         let mut vnsum = self.vnsum.clone();
         let mut edges = self.edges.clone();
         let mut edgessum = self.edgessum.clone();
-        let mut hard_decision = [BType::zero(); N];
+        let mut hard_decision = vec![BType::zero(); self.N];
+
+        let BVARS = self.N - self.R;
+        let SW = self.DC - 1;
 
         // 0. Initialize the channel values
         for (var_idx, (v, m)) in (0..).zip(vn.iter_mut().zip(channel_llr)) {
@@ -505,12 +519,12 @@ where
 
                 // ::log::info!("alpha_i {:?}, alpha_ij_sum = {:?}", alpha_i, alpha_ij_sum);
 
-                let mut beta_i = [QaryLlrs::<BSIZE>([FloatType::INFINITY; BSIZE]); SW];
+                let mut beta_i = vec![QaryLlrs::<BSIZE>([FloatType::INFINITY; BSIZE]); SW];
                 let mut beta_ij_sum = QaryLlrs::<BSUMSIZE>([FloatType::INFINITY; BSUMSIZE]);
 
                 // ::log::info!("beta_i {:?}, beta_ij_sum = {:?}", beta_i, beta_ij_sum);
                 
-                let mut d_values_iter = SimpleDValueIterator::<SW, BType>::new(BType::from(B).unwrap(), num_nones);
+                let mut d_values_iter = SimpleDValueIterator::<BType>::new(BType::from(B).unwrap(), num_nones, SW);
                 while let Some(d_values) = d_values_iter.next() {
                     let mut d_value_sum = BType::zero();
                     for d in d_values.iter() {
@@ -598,9 +612,9 @@ where
         Ok(hard_decision)
     }
 
-    pub fn into_llr<const T: usize, const U: usize>(channel_output: &[[FloatType; T]; U]) -> [QaryLlrs<T>; U] {
+    pub fn into_llr<const T: usize>(channel_output: &Vec<Vec<FloatType>>) -> Vec<QaryLlrs<T>> {
         const EPSILON: FloatType = 0.001;
-        let mut llrs = [QaryLlrs::<T>([0.0; T]); U];
+        let mut llrs: Vec<QaryLlrs<T>> = vec![QaryLlrs::<T>([0.0; T]); channel_output.len()];
         for (var, msg) in channel_output.iter().zip(llrs.iter_mut()) {
             let sum: FloatType = var.iter().sum();
             let max = var

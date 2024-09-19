@@ -1,5 +1,5 @@
 // This is for the g2p macro
-#![allow(clippy::suspicious_arithmetic_impl)]
+#![allow(clippy::suspicious_arithmetic_impl,non_snake_case)]
 use std::{arch::x86_64::__rdtscp};
 use std::arch::x86_64::__get_cpuid_max;
 use anyhow::Result;
@@ -52,10 +52,6 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     register_py_decoder_special_class!(
         m <= DecoderNTRU761W2 {
-            N: 1522,
-            R: 761,
-            DV: 2,
-            DC: 3,
             B: 1,
             BSUM: 2
         }
@@ -63,10 +59,6 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 
     register_py_decoder_special_class!(
         m <= DecoderNTRU761W4 {
-            N: 1902,
-            R: 1141,
-            DV: 8,
-            DC: 5,
             B: 1,
             BSUM: 4
         }
@@ -75,10 +67,10 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     // Full Kyber-768, sum_weight = 6, check_blocks = 1
     register_py_decoder_special_class!(
         m <= DecoderN1024R256SW6 {
-            N: 1024, // 768 + check_blocks*256
-            R: 256,
-            DV: 2,
-            DC: 7,
+            // N: 1024, // 768 + check_blocks*256
+            // R: 256,
+            // DV: 2,
+            // DC: 7,
             B: 2,
             BSUM: 12
         }
@@ -87,10 +79,10 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     // Full Kyber-768, sum_weight = 6, check_blocks = 2
     register_py_decoder_special_class!(
         m <= DecoderN1280R512SW6 {
-            N: 1280,
-            R: 512,
-            DV: 4,
-            DC: 7,
+            // N: 1280,
+            // R: 512,
+            // DV: 4,
+            // DC: 7,
             B: 2,
             BSUM: 12
         }

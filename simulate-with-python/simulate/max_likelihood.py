@@ -1,7 +1,11 @@
 import itertools as it
+import random
 
 
 class BaseOracle:
+    def __init__(self):
+        self.oracle_calls = 0
+
     def prob_of(self, expected, actual, pos):
         raise NotImplementedError()
 
@@ -9,6 +13,7 @@ class BaseOracle:
 class SimpleOracle(BaseOracle):
     # p: accuracy of oracle
     def __init__(self, p):
+        super().__init__()
         self.p = p
 
     def prob_of(self, expected, actual, pos):
@@ -17,15 +22,25 @@ class SimpleOracle(BaseOracle):
         else:
             return 1 - self.p
 
+    def predict_bit(self, actual_bit, pos):
+        self.oracle_calls += 1
+        rnd = random.random()
+        if rnd < self.p:
+            return actual_bit
+        else:
+            return 1 - actual_bit
+
 
 class FalsePositiveNegativePositionalOracle(BaseOracle):
-    # as input p_arr should be array of tuples, where tuple i contains a pair of probability of false positive and
-    # false negative, resp., for pos == i
-    def __init__(self, p_arr):
-        self.p_arr = p_arr
+    # as input p_positional should be array of tuples, where tuple i contains a pair of
+    # probability of false positive and false negative, resp., for pos == i.
+    # Alternatively, p_positional could be an dictionary, with values being tuples as before
+    def __init__(self, p_positional):
+        super().__init__()
+        self.p_positional = p_positional
 
     def prob_of(self, expected, actual, pos):
-        pr_fp, pr_fn = self.p_arr[pos]
+        pr_fp, pr_fn = self.p_positional[pos]
         if expected == 0:
             if actual == 1:
                 return pr_fp
@@ -36,6 +51,21 @@ class FalsePositiveNegativePositionalOracle(BaseOracle):
                 return pr_fn
             else:
                 return 1 - pr_fn
+
+    def predict_bit(self, actual_bit, pos):
+        self.oracle_calls += 1
+        rnd = random.random()
+        pr_fp, pr_fn = self.p_positional[pos]
+        if actual_bit == 0:
+            if rnd < pr_fp:
+                return 1 - actual_bit
+            else:
+                return actual_bit
+        else:
+            if rnd < pr_fn:
+                return 1 - actual_bit
+            else:
+                return actual_bit
 
 
 def pr_cond_yx(y, x, pr_oracle):
@@ -107,36 +137,33 @@ def s_distribution_from_hard_y(
     return distr
 
 
-# TODO: fix *_adaptive with probability oracles
-def pr_cond_yx_adaptive(y, s, p, coding_tree):
+def pr_cond_yx_adaptive(y, s, pr_oracle, coding_tree):
     # compute Pr[Y = y | X = e(s)]
     res = 1
     node = coding_tree
     for y_val in y:
-        if s < node.value:
-            # y_val should be 1
-            if y_val == 1:
-                res *= p
-                node = node.left
-            else:
-                res *= 1 - p
-                node = node.right
+        pos = (node.ge_flag, node.value)
+        if node.ge_flag:
+            expected_bit = int(s >= node.value)
         else:
-            # y_val should be 0
-            if y_val == 1:
-                res *= 1 - p
-                node = node.left
-            else:
-                res *= p
-                node = node.right
+            expected_bit = int(s <= node.value)
+        res *= pr_oracle.prob_of(expected_bit, y_val, pos)
+        if y_val == 1:
+            node = node.right
+        else:
+            node = node.left
     return res
 
 
-def pr_y_adaptive(y, p, secret_range_func, coding_tree, distrib_secret, sum_weight):
+def pr_y_adaptive(
+    y, pr_oracle, secret_range_func, coding_tree, distrib_secret, sum_weight
+):
     # compute Pr[Y = y]
     res = 0
     for s in secret_range_func(sum_weight):
-        pr_xprime_y = distrib_secret[s] * pr_cond_yx_adaptive(y, s, p, coding_tree)
+        pr_xprime_y = distrib_secret[s] * pr_cond_yx_adaptive(
+            y, s, pr_oracle, coding_tree
+        )
         res += pr_xprime_y
     return res
 
@@ -144,7 +171,7 @@ def pr_y_adaptive(y, p, secret_range_func, coding_tree, distrib_secret, sum_weig
 def pr_cond_xy_adaptive(
     s,
     y,
-    p,
+    pr_oracle,
     secret_range_func,
     coding_tree,
     distrib_secret,
@@ -154,20 +181,24 @@ def pr_cond_xy_adaptive(
     # compute Pr[X = e(s) | Y = y]
     if pr_y_saved is None:
         pr_y_saved = pr_y_adaptive(
-            y, p, secret_range_func, coding_tree, distrib_secret, sum_weight
+            y, pr_oracle, secret_range_func, coding_tree, distrib_secret, sum_weight
         )
-    return pr_cond_yx_adaptive(y, s, p, coding_tree) * distrib_secret[s] / pr_y_saved
+    return (
+        pr_cond_yx_adaptive(y, s, pr_oracle, coding_tree)
+        * distrib_secret[s]
+        / pr_y_saved
+    )
 
 
 def s_distribution_from_hard_y_adaptive(
-    y, p, secret_range_func, coding_tree, distrib_secret, sum_weight
+    y, pr_oracle, secret_range_func, coding_tree, distrib_secret, sum_weight
 ):
     distr = [0] * len(distrib_secret)
     for i, s in enumerate(secret_range_func(sum_weight)):
         distr[i] = pr_cond_xy_adaptive(
             s,
             y,
-            p,
+            pr_oracle,
             secret_range_func,
             coding_tree,
             distrib_secret,

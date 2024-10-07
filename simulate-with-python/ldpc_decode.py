@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__.replace("__", ""))
 MOVE_SINGLE_CHECKS_TO_APRIOR = True
 
 
-def process_file(filename, n):
+def process_file(filename, n, check_weight):
     if not os.path.isfile(filename):
         print("File does not exist")
         return None, None
@@ -33,6 +33,11 @@ def process_file(filename, n):
     for i in range(0, len(lines), 2):
         indices = list(map(int, lines[i].strip().split(", ")))
         probabilities = list(map(float, lines[i + 1].strip().split(",")))
+
+        # support the case where extra probabilities are not printed
+        if len(probabilities) == len(indices) * 2 + 1 and len(indices) < check_weight:
+            offset = check_weight - len(indices)
+            probabilities = [0.0] * offset + probabilities + [0.0] * offset
 
         if MOVE_SINGLE_CHECKS_TO_APRIOR and len(indices) == 1:
             single_check_idxs.append(indices[0])
@@ -67,10 +72,13 @@ if len(argv) >= 4:
 p = 761
 # weight of f
 w = 286
+check_weight = 2
 
 # read posterior distribution of check variables
 filename = argv[1]
-H, check_variables, single_check_idxs, single_check_distr = process_file(filename, p)
+H, check_variables, single_check_idxs, single_check_distr = process_file(
+    filename, p, check_weight
+)
 if H is None or check_variables is None:
     exit()
 row_counts = np.count_nonzero(H, axis=1)
@@ -106,7 +114,16 @@ secret_variables = np.array(secret_variables, dtype=np.float32)
 check_variables = np.array(check_variables, dtype=np.float32)
 
 # print("Creating decoder")
-decoder = DecoderNTRU761W4(H.astype("int8"), max_col_weight, max_row_weight, iterations)
+if check_weight == 2:
+    decoder = DecoderNTRU761W2(
+        H.astype("int8"), max_col_weight, max_row_weight, iterations
+    )
+elif check_weight == 4:
+    decoder = DecoderNTRU761W4(
+        H.astype("int8"), max_col_weight, max_row_weight, iterations
+    )
+else:
+    raise ValueError("Not supported check weight")
 # print("Decoder created, computing min_sum")
 s_decoded = decoder.min_sum(secret_variables, check_variables)
 # print("Done")

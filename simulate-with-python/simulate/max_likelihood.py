@@ -193,7 +193,9 @@ def pr_cond_xy_adaptive(
 def s_distribution_from_hard_y_adaptive(
     y, pr_oracle, secret_range_func, coding_tree, distrib_secret, sum_weight
 ):
-    distr = [0] * len(distrib_secret)
+    # assume here that distrib_secret include probabilities for all values, i.e.
+    # distrib_secret[s] is 0 for non-existent s in original distrib_secret
+    distr = [0] * (2 * sum_weight + 1)
     for i, s in enumerate(secret_range_func(sum_weight)):
         distr[i] = pr_cond_xy_adaptive(
             s,

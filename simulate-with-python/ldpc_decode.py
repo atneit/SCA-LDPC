@@ -12,6 +12,8 @@ import logging
 
 logger = logging.getLogger(__name__.replace("__", ""))
 
+MOVE_SINGLE_CHECKS_TO_APRIOR = True
+
 
 def process_file(filename, n):
     if not os.path.isfile(filename):
@@ -24,15 +26,22 @@ def process_file(filename, n):
     index_lines = []
     probability_lists = []
 
+    single_check_idxs = []
+    single_check_distr = []
+
     # read lines in blocks of 2
     for i in range(0, len(lines), 2):
         indices = list(map(int, lines[i].strip().split(", ")))
         probabilities = list(map(float, lines[i + 1].strip().split(",")))
 
-        index_lines.append(indices)
-        probability_lists.append(probabilities)
+        if MOVE_SINGLE_CHECKS_TO_APRIOR and len(indices) == 1:
+            single_check_idxs.append(indices[0])
+            single_check_distr.append(probabilities)
+        else:
+            index_lines.append(indices)
+            probability_lists.append(probabilities)
 
-    # Determine the size of the matrix
+    # Determine the number of parity checks
     num_rows = len(index_lines)
     # Create the matrix with the appropriate size
     matrix = np.zeros((num_rows, n + num_rows), dtype=int)
@@ -43,7 +52,7 @@ def process_file(filename, n):
             matrix[i, index] = 1
         matrix[i, n + i] = -1
 
-    return matrix, probability_lists
+    return matrix, probability_lists, single_check_idxs, single_check_distr
 
 
 argv = sys.argv
@@ -59,16 +68,9 @@ p = 761
 # weight of f
 w = 286
 
-# determine the prior distribution of coefficients of f
-f_zero_prob = (p - w) / p
-f_one_prob = (1 - f_zero_prob) / 2
-secret_variables = []
-for _ in range(p):
-    secret_variables.append([f_one_prob, f_zero_prob, f_one_prob])
-
 # read posterior distribution of check variables
 filename = argv[1]
-H, check_variables = process_file(filename, p)
+H, check_variables, single_check_idxs, single_check_distr = process_file(filename, p)
 if H is None or check_variables is None:
     exit()
 row_counts = np.count_nonzero(H, axis=1)
@@ -78,6 +80,26 @@ max_col_weight = np.max(col_counts)
 
 print(len(H), len(H[0]))
 print(max_row_weight, max_col_weight)
+print(f"min={np.min(col_counts)}; variance = {np.var(col_counts)}")
+
+# determine the prior distribution of coefficients of f
+f_zero_prob = (p - w) / p
+f_one_prob = (1 - f_zero_prob) / 2
+secret_variables = []
+
+single_checks = sorted(zip(single_check_idxs, single_check_distr))
+single_checks_idx = 0
+for i in range(p):
+    if (
+        single_checks_idx < len(single_checks)
+        and single_checks[single_checks_idx][0] == i
+    ):
+        distr = single_checks[single_checks_idx][1]
+        l = len(distr)
+        secret_variables.append(distr[l // 2 - 1 : l // 2 + 2])
+        single_checks_idx += 1
+    else:
+        secret_variables.append([f_one_prob, f_zero_prob, f_one_prob])
 
 # convert to numpy arrays for Rust be able to work on the arrays
 secret_variables = np.array(secret_variables, dtype=np.float32)

@@ -167,6 +167,8 @@ f = [2047,1,0,1,1,2047,1,0,1,1,1,2047,1,1,0,1,2047,0,0,2047,1,2047,1,2047,2047,1
 # fmt: on
 f = to_centered(f)
 col_idx = 427
+# reset oracle count for secret key
+pr_oracle.oracle_calls = 0
 
 alpha_idxs = []
 cond_distr = []
@@ -205,3 +207,4 @@ fprime = s_decoded[:n]
 # print(fprime)
 differences = sum(f[i] != fprime[i] for i in range(len(f)))
 print(f"{differences=}")
+print(f"Used {pr_oracle.oracle_calls} oracle calls")

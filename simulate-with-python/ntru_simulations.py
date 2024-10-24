@@ -8,6 +8,7 @@ import numpy as np
 from simulate.adaptive_tree_coding import (
     sample_coef_with_adaptive_coding,
     tree_from_array,
+    tree_from_coding,
 )
 from simulate.information_theoretic_coding_utils import information_for_coding_tree
 from simulate.max_likelihood import (
@@ -90,6 +91,69 @@ def has_length_4_cycle(res_idxs):
 
     return False  # No length-4 cycles found
 
+def extend_distribution(distr, target_b):
+    l = len(distr)
+    B = (l - 1) // 2
+    res = [0.0] * (target_b * 2 + 1)
+    for i, pr in enumerate(distr):
+        if pr > 0:
+            x = i - B
+            new_idx = x + target_b
+            res[new_idx] = pr
+    return res
+
+
+def parse_file(file_path):
+    keys = []
+    collisions = []
+
+    with open(file_path, "r") as f:
+        current_key = []
+        in_key_section = False
+        num_collisions = 0
+        collision_info = []
+
+        for line in f:
+            line = line.strip()
+
+            # Look for "pq_counter:"
+            if line.startswith("pq_counter:"):
+                # Reset variables for new entry
+                current_key = []
+                in_key_section = False
+                num_collisions = 0
+                collision_info = []
+
+            # Look for "The private key is:"
+            elif line == "The private key is:":
+                in_key_section = True
+                continue  # Skip to next line, where the key starts
+
+            # If we are in the key section, capture the key data
+            elif in_key_section:
+                if line:  # If the line contains key data
+                    # Remove trailing comma and split the key values
+                    current_key = [int(x) for x in line.rstrip(",").split(",")]
+                    in_key_section = False  # We are done with key section
+
+            # Look for "Collisions detected:"
+            elif line.startswith("Collisions detected:"):
+                num_collisions = int(line.split(":")[1])
+
+            # Capture collision index and value
+            elif line.startswith("collision_index"):
+                index_value = line.split(",")
+                collision_index = int(index_value[0].split(":")[1])
+                collision_value = int(index_value[1].split(":")[1])
+                collision_info.append((collision_index, collision_value))
+
+                # If only one collision is detected, save the key and collision info
+                if num_collisions == 1:
+                    keys.append(current_key)
+                    collisions.append(collision_info)
+
+    return keys, collisions
+
 
 def ldpc_decode(idxs, distrs, iterations, prior_secret_variables, sum_weight):
     num_rows = len(idxs)
@@ -124,87 +188,144 @@ def ldpc_decode(idxs, distrs, iterations, prior_secret_variables, sum_weight):
 
 
 # FIRST: choose "good" weight of check variables
-sum_weight = 2
 # SECOND: choose "good" coding tree for check variables
-coding_tree = tree_from_array([(True, 1), (False, -1), (True, 2), None, (False, -2)])
 # THIRD: choose "good" list of check variables
+# here we can choose check variables with different parameters, e.g. ask a few with
+# weight 2, then a few with weight 4
+attack_params = []
+random.seed(0)
+
+sum_weight = 2
 u_list = []
-random.seed(4)
 # naive idea: generate random indices for the first row, then just shift it; repeat a few times
-for _ in range(2):
-    u_base = sorted(random.sample(range(n), sum_weight))
-    for offset in range(n):
-        u_list.append(list((u_val + offset) % n for u_val in u_base))
+u_base = sorted(random.sample(range(n), sum_weight))
+for offset in range(n):
+    u_list.append(list((u_val + offset) % n for u_val in u_base))
+coding_tree = tree_from_array([(True, 1), (False, -1), (True, 2), None, (False, -2)])
+attack_params.append((u_list, coding_tree, sum_weight))
+sum_weight = 4
+u_list = []
+# naive idea: generate random indices for the first row, then just shift it; repeat a few times
+u_base = sorted(random.sample(range(n), sum_weight))
+for offset in range(n):
+    u_list.append(list((u_val + offset) % n for u_val in u_base))
+coding_tree = tree_from_array(
+    [
+        (True, 1),
+        (False, -1),
+        (True, 2),
+        None,
+        (False, -2),
+        None,
+        (True, 3),
+        None,
+        None,
+        None,
+        (False, -3),
+    ]
+)
+# can also create trees from the table (same result):
+coding_tree = tree_from_coding(
+    [
+        (0, 1, 1, 1),
+        (0, 1, 1, 1),
+        (0, 1, 1, 0),
+        (0, 1, 0),
+        (0, 0),
+        (1, 0),
+        (1, 1, 0),
+        (1, 1, 1),
+        (1, 1, 1),
+    ]
+)
+attack_params.append(
+    (
+        u_list,
+        coding_tree,
+        sum_weight,
+    )
+)
+patterns = [(0, 1, 1), (0, 1, 0), (0, 0), (1, 0), (1, 1)]
+coding_tree = tree_from_coding(patterns)
+
 # check that among our check variables there are no cycles of length 4
-is_bad_list = has_length_4_cycle(u_list)
-assert not is_bad_list
+total_u_list = sum((params[0] for params in attack_params), [])
+is_bad_list = has_length_4_cycle(total_u_list)
+assert (
+    not is_bad_list
+), "Check variables have a cycle of length 4, try different random.seed()"
+max_sum_weight = max(params[2] for params in attack_params)
 
 
-pr_oracle = SimpleOracle(0.99)  # Bernoulli noise
-# pr_oracle = SimpleOracle(1)  # Bernoulli noise
+pr_oracle = SimpleOracle(0.95)  # Bernoulli noise
 s_distr = secret_distr()
 beta_distr = list(sum_secret_distr(s_distr, i + 1) for i in range(sum_weight))
-for i, distr in enumerate(beta_distr):
-    print(f"weight = {i+1}, entropy = {float(entropy(distr)):.3f}")
-    print(", ".join(f"{float(x):.4f}" for x in distr.values()))
+# for i, distr in enumerate(beta_distr):
+#     print(f"weight = {i+1}, entropy = {float(entropy(distr)):.3f}")
+#     print(", ".join(f"{float(x):.4f}" for x in distr.values()))
 s_distr_flat = list((s_distr[-1], s_distr[0], s_distr[1]))
 s_prior = list(s_distr_flat for _ in range(n))
 
-print("Coding tree gives (no more than) the following information per check variable")
-for i, distr in enumerate(beta_distr):
-    if i % 2 == 1:
-        continue
-    info, avg_length = information_for_coding_tree(
-        pr_oracle, secret_range, coding_tree, distr, i + 1
-    )
-    print(f"{i=}, {info=}, {avg_length=}")
+# print("Coding tree gives (no more than) the following information per check variable")
+# for i, distr in enumerate(beta_distr):
+#     if i % 2 == 1:
+#         continue
+#     info, avg_length = information_for_coding_tree(
+#         pr_oracle, secret_range, coding_tree, distr, i + 1
+#     )
+#     print(f"{i=}, {info=}, {avg_length=}")
 
-print("====================")
+# print("====================")
 
-# TODO: parse file and get data from it
-# fmt: off
-f = [2047,1,0,1,1,2047,1,0,1,1,1,2047,1,1,0,1,2047,0,0,2047,1,2047,1,2047,2047,1,0,1,0,2047,0,1,0,1,2047,1,1,0,1,0,0,2047,1,0,0,0,1,0,0,1,1,0,0,2047,2047,0,0,1,2047,1,1,2047,0,0,2047,2047,0,2047,1,0,2047,0,0,1,0,0,2047,1,0,1,0,2047,2047,2047,2047,1,2047,1,0,1,1,2047,1,1,0,1,0,1,2047,0,2047,1,0,1,2047,0,2047,2047,0,1,0,0,1,2047,1,2047,0,2047,0,0,0,1,1,1,0,1,2047,2047,0,0,1,0,2047,1,1,2047,2047,1,1,0,0,0,1,1,2047,0,1,1,2047,0,1,2047,2047,1,2047,0,0,2047,1,2047,0,2047,1,0,0,2047,1,0,0,1,0,2047,0,2047,1,1,2047,1,1,0,0,1,0,1,1,2047,0,2047,2047,0,1,1,2047,0,2047,0,2047,1,0,0,1,0,1,2047,0,0,0,1,2047,0,1,2047,1,1,1,0,0,2047,0,2047,2047,0,2047,0,2047,2047,0,2047,1,1,2047,0,0,1,0,2047,1,1,1,1,2047,1,1,0,2047,0,2047,1,2047,0,0,0,0,1,0,0,1,0,2047,1,2047,1,1,2047,1,0,0,2047,2047,2047,0,1,0,2047,0,2047,1,0,1,2047,2047,0,1,0,2047,2047,2047,2047,2047,1,0,2047,1,2047,2047,0,2047,1,1,2047,1,1,2047,1,1,2047,1,2047,2047,0,0,1,1,1,1,0,2047,2047,2047,2047,1,0,2047,1,0,1,0,1,2047,1,2047,0,0,1,0,1,1,2047,0,0,2047,2047,0,2047,2047,1,1,2047,1,0,1,2047,1,1,2047,0,1,2047,1,1,1,0,2047,2047,1,0,2047,2047,2047,2047,2047,0,1,0,1,0,1,0,1,1,2047,1,2047,0,1,2047,0,1,0,2047,1,0,2047,1,0,0,0,1,2047,0,2047,0,1,0,2047,2047,2047,2047,2047,1,0,1,2047,0,0,2047,0,0,2047,1,0,1,2047,2047,0,1,2047,0,1,2047,1,0,0,1,1,0,2047,1,0,2047,2047,1,1,2047,2047,0,2047,2047,2047,0,0,2047,2047,0,0,1,1,0,1,2047,2047,0,1,1,1,2047,2047,2047,0,1,0,1,0,0,0,2047,1,2047,0,0,1,0,0,2047,0,2047,0,2047,1,2047,2047,2047,2047,1,1,2047,2047,0,2047,2047,2047,1,2047,1,1,0,1,0,0,]
-# fmt: on
-f = to_centered(f)
-col_idx = 427
-# reset oracle count for secret key
-pr_oracle.oracle_calls = 0
+TEST_KEYS = 100
 
-alpha_idxs = []
-cond_distr = []
-for u in u_list:
-    alpha = list(compute_alpha(u_val, col_idx, n) for u_val in u)
-    beta_u = 0
-    for i, idx in enumerate(alpha):
-        # for even i we add coefficient of f, otherwise we subtract it
-        f_coef = f[idx]
-        if (i % 2) == 0:
-            beta_u += f_coef
-        else:
-            beta_u -= f_coef
-    y = sample_coef_with_adaptive_coding(pr_oracle, beta_u, coding_tree)
-    distr = s_distribution_from_hard_y_adaptive(
-        y,
-        pr_oracle,
-        secret_range,
-        coding_tree,
-        beta_distr[sum_weight - 1],
-        sum_weight,
-    )
-    alpha_idxs.append(alpha)
-    cond_distr.append(distr)
+keys, collisions = parse_file("private_key_and_collision_info.bin")
+differences_arr = []
+oracle_calls_arr = []
+key_num = 0
+for key, collision_info in zip(keys, collisions):
+    if key_num >= TEST_KEYS:
+        break
+    f = to_centered(key)
+    col_idx = collision_info[0][0]
+    # reset oracle count for secret key
+    pr_oracle.oracle_calls = 0
+
+    alpha_idxs = []
+    cond_distr = []
+    for u_list, coding_tree, sum_weight in attack_params:
+        for u in u_list:
+            alpha = list(compute_alpha(u_val, col_idx, n) for u_val in u)
+            beta_u = 0
+            for i, idx in enumerate(alpha):
+                # for even i we add coefficient of f, otherwise we subtract it
+                f_coef = f[idx]
+                if (i % 2) == 0:
+                    beta_u += f_coef
+                else:
+                    beta_u -= f_coef
+            y = sample_coef_with_adaptive_coding(pr_oracle, beta_u, coding_tree)
+            distr = s_distribution_from_hard_y_adaptive(
+                y,
+                pr_oracle,
+                secret_range,
+                coding_tree,
+                beta_distr[sum_weight - 1],
+                sum_weight,
+            )
+            alpha_idxs.append(alpha)
+            if sum_weight == max_sum_weight:
+                cond_distr.append(distr)
+            else:
+                cond_distr.append(extend_distribution(distr, max_sum_weight))
+
+    s_decoded = ldpc_decode(alpha_idxs, cond_distr, 11, s_prior, max_sum_weight)
+    fprime = s_decoded[:n]
+    differences = sum(f[i] != fprime[i] for i in range(len(f)))
+    differences_arr.append(differences)
+    oracle_calls_arr.append(pr_oracle.oracle_calls)
+    key_num += 1
 
 
-# print(u_list[0])
-# for u_val in u_list[0]:
-#     print(u_val, "->", compute_alpha(u_val, col_idx, n))
-#     print(f[compute_alpha(u_val, col_idx, n)])
-# print(cond_distr[0])
-
-s_decoded = ldpc_decode(alpha_idxs, cond_distr, 11, s_prior, sum_weight)
-fprime = s_decoded[:n]
-# print(f)
-# print(fprime)
-differences = sum(f[i] != fprime[i] for i in range(len(f)))
-print(f"{differences=}")
-print(f"Used {pr_oracle.oracle_calls} oracle calls")
+print(f"Average number of incorrect coefficients = {np.average(differences_arr)}")
+print(f"Average number of oracle calls = {np.average(oracle_calls_arr)}")

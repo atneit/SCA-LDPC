@@ -12,25 +12,32 @@ class Node:
         self.right = right
 
 
-# def recursive_patterns_scan(patterns, position, begin, end, B):
-#     if end - begin == 1 or position >= len(patterns[begin]):
-#         # return Node(begin - B)
-#         return None
-#     for i in range(begin, end):
-#         p = patterns[i]
-#         if p[position] == 0:
-#             # at index i we have a switch from 1 to 0
-#             n = Node(i - B)
-#             n.left = recursive_patterns_scan(patterns, position + 1, begin, i, B)
-#             n.right = recursive_patterns_scan(patterns, position + 1, i, end, B)
-#             return n
+def recursive_patterns_scan(patterns, position, begin, end, B):
+    if end - begin == 1 or position >= len(patterns[begin]):
+        return None
+    start_val = patterns[begin][position]
+    for i in range(begin, end):
+        p = patterns[i]
+        if p[position] != start_val:
+            # at index i we have a switch
+            if start_val == 0:
+                n = Node(ge_flag=True, value=(i - B))
+                n.left = recursive_patterns_scan(patterns, position + 1, begin, i, B)
+                n.right = recursive_patterns_scan(patterns, position + 1, i, end, B)
+            else:
+                n = Node(ge_flag=False, value=(i - B - 1))
+                n.right = recursive_patterns_scan(patterns, position + 1, begin, i, B)
+                n.left = recursive_patterns_scan(patterns, position + 1, i, end, B)
+            return n
+    raise NotImplementedError(
+        "Should add support to the case when there is no switch in recursive_patterns_scan"
+    )
 
-
-# # Assume that each call to oracle gives information of the form "s < x" for fixed x
-# def tree_from_coding(patterns):
-#     B = len(patterns) // 2
-#     assert len(patterns) == 2 * B + 1
-#     return recursive_patterns_scan(patterns, 0, 0, len(patterns), B)
+# Assume that each call to oracle gives information of the form "s < x" for fixed x
+def tree_from_coding(patterns):
+    B = len(patterns) // 2
+    assert len(patterns) == 2 * B + 1
+    return recursive_patterns_scan(patterns, 0, 0, len(patterns), B)
 
 
 # Returns probability for each possible path in the tree. The path is taken for <value>, i.e. we check

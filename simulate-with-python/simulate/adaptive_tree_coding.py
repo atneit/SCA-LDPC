@@ -33,19 +33,51 @@ class Node:
 #     return recursive_patterns_scan(patterns, 0, 0, len(patterns), B)
 
 
-# def traverse_all_paths_for_value(root, accuracy, value):
-#     d = deque([(root, tuple(), 1)])
-#     while len(d) != 0:
-#         node, label, prob = d.pop()
-#         if node is None:
-#             yield (label, prob)
-#             continue
-#         if value < node.value:
-#             d.append((node.left, label + (1,), prob * accuracy))
-#             d.append((node.right, label + (0,), prob * (1 - accuracy)))
-#         else:
-#             d.append((node.left, label + (1,), prob * (1 - accuracy)))
-#             d.append((node.right, label + (0,), prob * accuracy))
+# Returns probability for each possible path in the tree. The path is taken for <value>, i.e. we check
+# going left or right depending on it
+def traverse_all_paths_for_value(root, pr_oracle, value):
+    d = deque([(root, tuple(), 1)])  # Start with root, empty label, and probability 1
+    while len(d) != 0:
+        node, label, prob = d.pop()
+        if node is None:
+            yield (label, prob)
+            continue
+
+        pos = (node.ge_flag, node.value)  # Node position as used in oracle
+        if node.ge_flag:
+            if value >= node.value:
+                # Predict for value >= node.value, i.e. expected = 1
+                d.append(
+                    (node.right, label + (1,), prob * pr_oracle.prob_of(1, 1, pos))
+                )  # Going right, output 1
+                d.append(
+                    (node.left, label + (0,), prob * pr_oracle.prob_of(1, 0, pos))
+                )  # Going left, output 0
+            else:
+                # Predict for value < node.value, i.e. expected = 0
+                d.append(
+                    (node.left, label + (0,), prob * pr_oracle.prob_of(0, 0, pos))
+                )  # Going left, output 0
+                d.append(
+                    (node.right, label + (1,), prob * pr_oracle.prob_of(0, 1, pos))
+                )  # Going right, output 1
+        else:
+            if value <= node.value:
+                # Predict for value <= node.value, i.e. expected = 1
+                d.append(
+                    (node.right, label + (1,), prob * pr_oracle.prob_of(1, 1, pos))
+                )  # Going right, output 1
+                d.append(
+                    (node.left, label + (0,), prob * pr_oracle.prob_of(1, 0, pos))
+                )  # Going left, output 0
+            else:
+                # Predict for value > node.value, i.e. expected = 0
+                d.append(
+                    (node.left, label + (0,), prob * pr_oracle.prob_of(0, 0, pos))
+                )  # Going left, output 0
+                d.append(
+                    (node.right, label + (1,), prob * pr_oracle.prob_of(0, 1, pos))
+                )  # Going right, output 1
 
 
 # def get_all_coding_tree_arrays(max_depth, B):

@@ -72,7 +72,7 @@ if len(argv) >= 4:
 p = 761
 # weight of f
 w = 286
-check_weight = 2
+check_weight = 4
 
 # read posterior distribution of check variables
 filename = argv[1]

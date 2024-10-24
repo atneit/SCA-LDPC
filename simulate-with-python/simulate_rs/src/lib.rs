@@ -51,16 +51,23 @@ fn simulate_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     );
 
     register_py_decoder_special_class!(
-        m <= DecoderNTRU761W2 {
+        m <= DecoderNTRUW2 {
             B: 1,
             BSUM: 2
         }
     );
 
     register_py_decoder_special_class!(
-        m <= DecoderNTRU761W4 {
+        m <= DecoderNTRUW4 {
             B: 1,
             BSUM: 4
+        }
+    );
+
+    register_py_decoder_special_class!(
+        m <= DecoderNTRUW6 {
+            B: 1,
+            BSUM: 6
         }
     );
 
